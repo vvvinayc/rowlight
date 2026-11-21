@@ -1,9 +1,9 @@
 // One query tab: Monaco editor + toolbar + results (one sub-tab per result set, plus Messages).
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import type { ConnectionConfig, QueryRunResult, ResultSet, SessionInfo } from '../../shared/types';
 import { api, ApiError, errorText, unwrap } from '../api';
-import { metaCache } from '../metaCache';
+import { metaCache, subscribe as subscribeMeta } from '../metaCache';
 import { formatEditor, monaco, registerEditorContext } from '../monacoSetup';
 import { editorTheme } from '../theme';
 import { connectionColor } from '../../shared/defaults';
@@ -75,6 +75,14 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
   const newTabRef = useRef(onNewTab);
   newTabRef.current = onNewTab;
   const connected = !!session;
+
+  // The DB dropdown lists the server's databases: load them as soon as the connection is open and
+  // re-render when the list arrives (before, it only appeared after the first query).
+  const [, metaChanged] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => subscribeMeta(metaChanged), []);
+  useEffect(() => {
+    if (session) metaCache.databases(conn.id).catch(() => {});
+  }, [session, conn.id]);
   const lastSql = useRef('');
   const [saving, setSaving] = useState(false);
   const [showSql, setShowSql] = useState(false);
