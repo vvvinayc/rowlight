@@ -1,11 +1,11 @@
-// Claude Desktop ⇄ LumenSQL bridge (MCP over stdio).
+// Claude Desktop ⇄ Rowlight bridge (MCP over stdio).
 //
 // Claude Desktop can only start local programs as MCP servers, so its config runs:
-//   LumenSQL.exe <this file> --connection <id>      (with ELECTRON_RUN_AS_NODE=1)
+//   Rowlight.exe <this file> --connection <id>      (with ELECTRON_RUN_AS_NODE=1)
 // The bridge answers initialize / tools/list itself (so the tools are always visible), and forwards
-// tool calls to LumenSQL's share server. It reads the CURRENT address + token of the share from
-// %APPDATA%\LumenSQL\mcp-shares.json on every call, so the config never contains a token and you never
-// have to copy one. If LumenSQL is not sharing the connection, the tool call returns a clear message.
+// tool calls to Rowlight's share server. It reads the CURRENT address + token of the share from
+// %APPDATA%\Rowlight\mcp-shares.json on every call, so the config never contains a token and you never
+// have to copy one. If Rowlight is not sharing the connection, the tool call returns a clear message.
 //
 // stdout is reserved for JSON-RPC messages; diagnostics go to stderr (Claude Desktop logs it).
 
@@ -20,10 +20,10 @@ const args = process.argv.slice(2);
 const argValue = (flag: string) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
 const connectionId = argValue('--connection') ?? '';
 const connectionName = argValue('--name') ?? 'database';
-const sharesFile = argValue('--shares') ?? path.join(process.env.APPDATA ?? '', 'LumenSQL', 'mcp-shares.json');
+const sharesFile = argValue('--shares') ?? path.join(process.env.APPDATA ?? '', 'Rowlight', 'mcp-shares.json');
 
 const NOT_SHARING =
-  `LumenSQL is not sharing "${connectionName}" right now. Ask the user to open LumenSQL, connect to "${connectionName}", ` +
+  `Rowlight is not sharing "${connectionName}" right now. Ask the user to open Rowlight, connect to "${connectionName}", ` +
   'click "✦ Share with Claude" and then "Start sharing". Then try again.';
 
 function send(msg: unknown) {
@@ -52,9 +52,9 @@ async function forward(msg: any): Promise<unknown> {
     });
     if (res.status === 401) return toolError(NOT_SHARING); // sharing was restarted with a new token
     const text = await res.text();
-    return text ? JSON.parse(text) : toolError(`LumenSQL returned HTTP ${res.status}`);
+    return text ? JSON.parse(text) : toolError(`Rowlight returned HTTP ${res.status}`);
   } catch {
-    return toolError(NOT_SHARING); // LumenSQL closed or sharing stopped
+    return toolError(NOT_SHARING); // Rowlight closed or sharing stopped
   }
 }
 
@@ -68,8 +68,8 @@ async function handle(msg: any) {
       return ok({
         protocolVersion: pickProtocolVersion(msg.params?.protocolVersion),
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'lumensql', version: SERVER_VERSION },
-        instructions: `Read-only SQL access to the LumenSQL connection "${connectionName}" (only while it is shared in LumenSQL). ` +
+        serverInfo: { name: 'rowlight', version: SERVER_VERSION },
+        instructions: `Read-only SQL access to the Rowlight connection "${connectionName}" (only while it is shared in Rowlight). ` +
           'Use list_tables and describe_table before writing queries.',
       });
     case 'ping':
@@ -97,8 +97,8 @@ rl.on('line', (line) => {
     return send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
   }
   for (const m of Array.isArray(msg) ? msg : [msg]) {
-    handle(m).catch((e) => process.stderr.write(`lumensql bridge: ${e?.stack ?? e}\n`));
+    handle(m).catch((e) => process.stderr.write(`rowlight bridge: ${e?.stack ?? e}\n`));
   }
 });
 rl.on('close', () => process.exit(0));
-process.stderr.write(`lumensql bridge started for connection ${connectionId} (shares file: ${sharesFile})\n`);
+process.stderr.write(`rowlight bridge started for connection ${connectionId} (shares file: ${sharesFile})\n`);

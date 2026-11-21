@@ -327,7 +327,7 @@ export function App() {
   return (
     <div className="app">
       <div className="topbar">
-        <span className="brand">LumenSQL</span>
+        <span className="brand">Rowlight</span>
         <button onClick={() => openTab(currentConnId ?? null)} title="New query tab (Ctrl+E)">+ Query tab</button>
         <button onClick={openFile} title="Open a .sql file (Ctrl+O)">Open…</button>
         <button onClick={() => saveFile(false)} disabled={!activeTabId} title="Save to a .sql file (Ctrl+S, Ctrl+Shift+S = Save as)">Save</button>
@@ -385,7 +385,7 @@ export function App() {
           <div className="tab-content">
             {tabs.length === 0 && (
               <div className="empty">
-                <h2>LumenSQL</h2>
+                <h2>Rowlight</h2>
                 <p>1. Add a connection with <b>+ New</b> in the sidebar (SSH tunnel optional).</p>
                 <p>2. Click <b>Connect</b>. A query tab opens automatically.</p>
                 <p>Ctrl+E new tab · Ctrl+Enter run · Ctrl+W close tab · Ctrl+O open · Ctrl+S save · Ctrl+Shift+F format</p>

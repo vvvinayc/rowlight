@@ -85,7 +85,7 @@ export function ShareDialog({ conn, info, onStart, onStop, onClose }: Props) {
               </div>
             ) : (
               <div>
-                <button className="primary" onClick={addDesktop} disabled={busy}>Add LumenSQL to Claude Desktop</button>
+                <button className="primary" onClick={addDesktop} disabled={busy}>Add Rowlight to Claude Desktop</button>
                 <div className="muted small">Adds a “{conn.name}” tool to Claude Desktop's settings. No password or token is stored there.</div>
               </div>
             )}
@@ -111,7 +111,7 @@ export function ShareDialog({ conn, info, onStart, onStop, onClose }: Props) {
               <div className="muted small">Claude Code was not found. Install the “Claude Code” extension in VS Code, then reopen this window.</div>
             ) : (
               <div>
-                <button className="primary" onClick={addCode} disabled={busy}>Add LumenSQL to Claude Code</button>
+                <button className="primary" onClick={addCode} disabled={busy}>Add Rowlight to Claude Code</button>
                 <div className="muted small">Works in every project: when Claude is fixing a bug in VS Code it can look up data here.</div>
               </div>
             )}
@@ -150,8 +150,8 @@ export function ShareDialog({ conn, info, onStart, onStop, onClose }: Props) {
 
         <ul className="share-facts small">
           <li><b>Always read-only</b> for Claude (even if writes are allowed in your tabs) · max <b>500 rows</b> · <b>15 s</b> timeout.</li>
-          <li>Every AI query is logged in History, marked “AI”. Sharing stops when you click Stop, disconnect, or close LumenSQL.</li>
-          <li>Claude in Chrome / claude.ai in a browser cannot reach LumenSQL (it runs in the cloud). Use the desktop app.</li>
+          <li>Every AI query is logged in History, marked “AI”. Sharing stops when you click Stop, disconnect, or close Rowlight.</li>
+          <li>Claude in Chrome / claude.ai in a browser cannot reach Rowlight (it runs in the cloud). Use the desktop app.</li>
         </ul>
 
         <button className="link" onClick={() => setShowCode((v) => !v)}>{showCode ? '▾' : '▸'} Another MCP client? Show the raw HTTP command</button>

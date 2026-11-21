@@ -1,5 +1,5 @@
 // Local persistence: connections.json, settings.json and per-connection query history.
-// Everything lives in %APPDATA%\LumenSQL. Passwords are encrypted with Electron safeStorage
+// Everything lives in %APPDATA%\Rowlight. Passwords are encrypted with Electron safeStorage
 // (Windows DPAPI, tied to your Windows user account) and never sent to the renderer.
 
 import { app, safeStorage } from 'electron';

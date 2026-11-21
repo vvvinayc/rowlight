@@ -1,8 +1,8 @@
 {
-  "name": "lumensql",
-  "productName": "LumenSQL",
-  "version": "0.7.2",
-  "description": "LumenSQL: light that reveals your data. Windows SQL client (MySQL / SQL Server) with SSH tunnels and Claude integration",
+  "name": "rowlight",
+  "productName": "Rowlight",
+  "version": "0.8.0",
+  "description": "Rowlight: shine a light on your rows. Safety-first Windows SQL client (MySQL / SQL Server) with SSH tunnels and Claude integration",
   "author": "VinayC",
   "main": "dist/main/main.js",
   "private": true,
@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "local.litesql.client",
-    "productName": "LumenSQL",
+    "productName": "Rowlight",
     "directories": {
       "output": "release"
     },

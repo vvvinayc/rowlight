@@ -1,4 +1,4 @@
-// MCP tool definitions shared by the LumenSQL share server (mcpServer.ts) and the
+// MCP tool definitions shared by the Rowlight share server (mcpServer.ts) and the
 // Claude Desktop bridge (src/bridge/bridge.ts). No Electron / Node imports here.
 
 export const ROW_CAP = 500;
@@ -46,7 +46,7 @@ export function pickProtocolVersion(asked: unknown): string {
   return typeof asked === 'string' && SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[1];
 }
 
-/** Server name used in Claude configs, e.g. "lumensql-prod-db". */
+/** Server name used in Claude configs, e.g. "rowlight-prod-db". */
 export function mcpServerName(connectionName: string): string {
-  return 'lumensql-' + (connectionName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'db');
+  return 'rowlight-' + (connectionName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'db');
 }

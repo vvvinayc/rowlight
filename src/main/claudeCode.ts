@@ -1,4 +1,4 @@
-// Connects LumenSQL shares to Claude Code: the VS Code extension, the terminal CLI and the
+// Connects Rowlight shares to Claude Code: the VS Code extension, the terminal CLI and the
 // Code tab of the Claude desktop app all read the same user-level MCP list in %USERPROFILE%\.claude.json.
 //
 // We never edit .claude.json ourselves (Claude Code rewrites it constantly); we call Claude Code's
@@ -75,7 +75,7 @@ async function removeLegacyHttpEntries(cli: string, name: string) {
   const projects = readClaudeJson().projects ?? {};
   for (const [projectPath, p] of Object.entries<any>(projects)) {
     for (const [key, e] of Object.entries<any>(p?.mcpServers ?? {})) {
-      const legacy = (key === name || key.startsWith('litesql-') || key.startsWith('lumensql-')) && e?.type === 'http' && /^http:\/\/(127\.0\.0\.1|localhost):\d+\/mcp$/.test(String(e?.url ?? ''));
+      const legacy = (key === name || key.startsWith('litesql-') || key.startsWith('lumensql-') || key.startsWith('rowlight-')) && e?.type === 'http' && /^http:\/\/(127\.0\.0\.1|localhost):\d+\/mcp$/.test(String(e?.url ?? ''));
       if (legacy && fs.existsSync(projectPath)) await run(cli, ['mcp', 'remove', key, '--scope', 'local'], projectPath);
     }
   }

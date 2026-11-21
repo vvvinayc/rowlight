@@ -1,6 +1,7 @@
-// One-time migration from the old app name (LiteSQL) to LumenSQL.
+// One-time migration from the old app names (LumenSQL, LiteSQL) to Rowlight.
 //
-// 1. Data: %APPDATA%\LiteSQL → %APPDATA%\LumenSQL (connections, settings, history, open tabs / theme).
+// 1. Data: %APPDATA%\LumenSQL (or LiteSQL) → %APPDATA%\Rowlight (connections, SSH profiles, settings,
+//    history, open tabs / theme).
 //    Must run BEFORE the app is ready, so Chromium has not opened "Local Storage" yet.
 //    Saved passwords keep working: DPAPI encryption is tied to the Windows user, not to the app.
 // 2. Claude links: entries in Claude Desktop / Claude Code that still start the OLD exe (or point at the
@@ -13,8 +14,8 @@ import * as store from './store';
 import { addToDesktop, desktopStatus } from './claudeDesktop';
 import { addToCode, codeStatus } from './claudeCode';
 
-const OLD_NAMES = ['LiteSQL'];
-const COPY = ['connections.json', 'settings.json', 'history', 'Local Storage'];
+const OLD_NAMES = ['LumenSQL', 'LiteSQL']; // newest first
+const COPY = ['connections.json', 'ssh-profiles.json', 'settings.json', 'history', 'Local Storage'];
 
 export function migrateOldData(): string | null {
   const target = app.getPath('userData');
@@ -37,7 +38,7 @@ export function migrateOldData(): string | null {
 
 /** Re-points Claude Desktop / Claude Code entries that were made by an older install. */
 export async function relinkClaudeEntries(log: (msg: string) => void): Promise<void> {
-  if (!app.isPackaged && !process.env.LUMENSQL_FORCE_RELINK) return; // dev runs must not touch real configs
+  if (!app.isPackaged && !process.env.ROWLIGHT_FORCE_RELINK) return; // dev runs must not touch real configs
   for (const c of store.listConnections()) {
     try {
       const d = desktopStatus(c.id);

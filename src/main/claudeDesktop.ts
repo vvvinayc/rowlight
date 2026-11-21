@@ -1,6 +1,6 @@
-// Connects LumenSQL shares to the Claude desktop app.
+// Connects Rowlight shares to the Claude desktop app.
 //
-// 1. mcp-shares.json (in LumenSQL's data folder) holds the address + token of each RUNNING share.
+// 1. mcp-shares.json (in Rowlight's data folder) holds the address + token of each RUNNING share.
 //    The bridge (src/bridge/bridge.ts) reads it on every tool call. Entries are removed when sharing stops.
 // 2. "Add to Claude Desktop" writes one entry per connection into claude_desktop_config.json, which
 //    starts the bridge. The entry contains no token, so it never has to change.
@@ -105,7 +105,7 @@ function readConfig(file: string): { mcpServers?: Record<string, McpEntry>; [k: 
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`Claude Desktop's config file is not valid JSON, so LumenSQL did not change it:\n${file}\nFix or delete it, then try again.`);
+    throw new Error(`Claude Desktop's config file is not valid JSON, so Rowlight did not change it:\n${file}\nFix or delete it, then try again.`);
   }
 }
 
@@ -135,7 +135,7 @@ export function desktopStatus(connectionId: string): DesktopStatus {
   return { found: dirs.length > 0, installed: false, files };
 }
 
-/** Adds (or updates) the LumenSQL entry for one connection in every Claude Desktop config found. */
+/** Adds (or updates) the Rowlight entry for one connection in every Claude Desktop config found. */
 export function addToDesktop(connectionId: string, connectionName: string): DesktopStatus {
   const dirs = claudeConfigDirs();
   if (!dirs.length) throw new Error('Claude Desktop was not found on this PC. Install the Claude desktop app, open it once, then try again.');
@@ -143,7 +143,7 @@ export function addToDesktop(connectionId: string, connectionName: string): Desk
   for (const dir of dirs) {
     const file = path.join(dir, CONFIG_FILE);
     const cfg = readConfig(file);
-    if (fs.existsSync(file) && !fs.existsSync(file + '.lumensql-backup')) fs.copyFileSync(file, file + '.lumensql-backup');
+    if (fs.existsSync(file) && !fs.existsSync(file + '.rowlight-backup')) fs.copyFileSync(file, file + '.rowlight-backup');
     const servers = (cfg.mcpServers ??= {});
     for (const [name, e] of Object.entries(servers)) if (isOurs(e, connectionId)) delete servers[name];
     let name = mcpServerName(connectionName);

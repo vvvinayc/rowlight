@@ -17,7 +17,7 @@ import { addToCode, codeStatus, removeFromCode } from './claudeCode';
 import { addToDesktop, clearShares, desktopStatus, publishShare, removeFromDesktop, unpublishShare } from './claudeDesktop';
 import * as store from './store';
 
-app.setName('LumenSQL');
+app.setName('Rowlight');
 // Logging must never crash the app (e.g. when its console output is a closed pipe → EPIPE).
 for (const stream of [process.stdout, process.stderr]) stream?.on?.('error', () => {});
 // First start after the rename: bring over connections, history, settings and open tabs from LiteSQL.
@@ -258,7 +258,7 @@ function createWindow() {
     height: 880,
     minWidth: 900,
     minHeight: 600,
-    title: 'LumenSQL',
+    title: 'Rowlight',
     backgroundColor: '#1e1f22',
     autoHideMenuBar: true,
     webPreferences: {

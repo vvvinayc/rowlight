@@ -22,7 +22,7 @@ export interface CodeStatus {
 export interface DesktopStatus {
   /** Claude Desktop is installed on this PC. */
   found: boolean;
-  /** LumenSQL is in Claude Desktop's config for this connection. */
+  /** Rowlight is in Claude Desktop's config for this connection. */
   installed: boolean;
   serverName?: string;
   files: string[];

@@ -1,17 +1,20 @@
-# LumenSQL
+# Rowlight
 
-**Light that reveals your data.** A fast, safety-first SQL client for Windows with built-in SSH tunnelling and
+**Shine a light on your rows.** A fast, safety-first SQL client for Windows with built-in SSH tunnelling and
 Claude AI integration. Works with **MySQL / MariaDB** and **Microsoft SQL Server**.
 
-LumenSQL is made for people who query production databases that sit behind an SSH bastion. You get the everyday
+Rowlight is made for people who query production databases that sit behind an SSH bastion. You get the everyday
 features of a desktop SQL client, plus guard rails so a stray `DELETE` never reaches prod. You can also let Claude
 (desktop app, VS Code or terminal) look up data for you without ever giving it write access.
 
-![LumenSQL – dark theme](docs/screenshots/main-dark.png)
+> Formerly published as *LumenSQL*. The name was changed to avoid confusion with other projects; installing Rowlight
+> moves your existing connections, SSH profiles, history and Claude links over automatically.
+
+![Rowlight – dark theme](docs/screenshots/main-dark.png)
 
 ---
 
-## Why LumenSQL?
+## Why Rowlight?
 
 - **The SSH tunnel just works.** SSH is built in (the pure-JavaScript [`ssh2`](https://github.com/mscdex/ssh2) library),
   so there's no `ssh.exe`, no PuTTY, no `SSH_ASKPASS`. It handles password and keyboard-interactive login (including
@@ -75,13 +78,13 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 
 ## Claude integration (MCP)
 
-LumenSQL runs a small local [MCP](https://modelcontextprotocol.io) server for the connection you choose to share.
+Rowlight runs a small local [MCP](https://modelcontextprotocol.io) server for the connection you choose to share.
 
 ![Share with Claude](docs/screenshots/share-with-claude.png)
 
 1. **Connect your Claude apps (once)**
-   - **Claude Desktop** (chat): click *Add LumenSQL to Claude Desktop*, then restart Claude Desktop.
-   - **Claude Code** (VS Code extension, terminal, Claude Desktop's Code tab): click *Add LumenSQL to Claude Code*.
+   - **Claude Desktop** (chat): click *Add Rowlight to Claude Desktop*, then restart Claude Desktop.
+   - **Claude Code** (VS Code extension, terminal, Claude Desktop's Code tab): click *Add Rowlight to Claude Code*.
      When Claude is fixing a bug in your repository, it can look up the data it needs.
 2. **Start sharing** a connection whenever you want Claude to use it.
 3. Ask Claude, e.g. *"Using Production, how many orders were cancelled last week?"*
@@ -92,11 +95,11 @@ Tools: `list_tables`, `describe_table`, `query`.
 - Listens on `127.0.0.1` only. A **new random bearer token** is created every time you share; browser origins are
   refused (DNS-rebinding protection).
 - The Claude config entries start a tiny local bridge and **contain no password or token**. The bridge reads the
-  current share address from LumenSQL's data folder.
+  current share address from Rowlight's data folder.
 - Claude is **always read-only** (statement checks, plus a `READ ONLY` session on MySQL), gets max **500 rows**, and
   queries are cancelled after **15 s**.
 - Every AI query, including blocked and timed-out ones, appears in **History** marked **AI**.
-- Sharing stops when you click *Stop*, disconnect, or close LumenSQL.
+- Sharing stops when you click *Stop*, disconnect, or close Rowlight.
 
 > Claude in a web browser (claude.ai, Claude in Chrome) can't reach a server on your PC; use the desktop app,
 > VS Code or the terminal.
@@ -114,10 +117,10 @@ confirmation, with an extra warning for prod/DR names.
 
 ## Install
 
-Download the latest **`LumenSQL Setup x.y.z.exe`** from [Releases](../../releases) and run it (per-user install).
+Download the latest **`Rowlight Setup x.y.z.exe`** from [Releases](../../releases) and run it (per-user install).
 The installer isn't code-signed, so Windows SmartScreen may warn: *More info → Run anyway*.
 
-Your data lives in `%APPDATA%\LumenSQL` (connections, SSH profiles, settings, history).
+Your data lives in `%APPDATA%\Rowlight` (connections, SSH profiles, settings, history).
 
 ## Build from source
 
@@ -125,7 +128,7 @@ Requires **Node.js 22.18+** on Windows.
 
 ```powershell
 git clone <this repository>
-cd lumensql
+cd rowlight
 npm install
 npm run dev        # build + start with live rebuild (Ctrl+Shift+R reloads the UI, F12 opens DevTools)
 ```
@@ -195,5 +198,5 @@ Contributions and ideas are welcome: open an issue or a pull request.
 
 [MIT](LICENSE) © 2026 VinayC
 
-*LumenSQL is an independent project. "Claude" is a product of Anthropic; MySQL, SQL Server and DBeaver are trademarks
+*Rowlight is an independent project. "Claude" is a product of Anthropic; MySQL, SQL Server and DBeaver are trademarks
 of their respective owners.*

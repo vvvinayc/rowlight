@@ -123,7 +123,7 @@ export class McpShare {
         return ok({
           protocolVersion: pickProtocolVersion(asked),
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'lumensql', version: SERVER_VERSION },
+          serverInfo: { name: 'rowlight', version: SERVER_VERSION },
           instructions:
             `Read-only access to the ${c.type === 'mysql' ? 'MySQL' : 'SQL Server'} connection "${c.name}"` +
             (c.database ? ` (default database: ${c.database})` : '') +
