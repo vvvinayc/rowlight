@@ -34,6 +34,14 @@ export interface Tunnel {
   close(): void;
 }
 
+/** A keyboard-interactive prompt that asks for the account password (not a one-time code). */
+export function isPasswordPrompt(prompt: string, echo: boolean): boolean {
+  const p = prompt.trim();
+  if (/(otp|one[- ]?time|verification|authenticator|token|2fa|mfa|totp|pin\b|code\b)/i.test(p) && !/pass(word|phrase)/i.test(p)) return false;
+  if (/pass(word|phrase|wd)?/i.test(p)) return true; // "Password:", "Password for x@y:", "(x@y) Password:", "Passphrase"
+  return !echo && p.length > 0 && !/[?]$/.test(p) && /:\s*$/.test(p) && !/(code|token|otp)/i.test(p); // other hidden "…:" prompts
+}
+
 function fingerprintOf(key: Buffer): string {
   return 'SHA256:' + crypto.createHash('sha256').update(key).digest('base64').replace(/=+$/, '');
 }
@@ -76,13 +84,27 @@ export async function openTunnel(opts: TunnelOptions): Promise<Tunnel> {
 
   // keyboard-interactive: answer "password"-style prompts with the saved password,
   // and ask the user for anything else (OTP / verification code).
+  // Bastions word the password question in many ways ("Password:", "Password for user@host:",
+  // "(user@host) Password:", "Enter passphrase:", …), so on the FIRST round any hidden prompt that is
+  // not clearly asking for a one-time code gets the saved password. Codes (OTP / verification / token)
+  // and every later round (= the server asks again, so the password was rejected or it wants more)
+  // are shown to the user.
+  let kiRound = 0;
   client.on('keyboard-interactive', (_name, instructions, _lang, prompts, finish) => {
-    const allPassword = prompts.length > 0 && prompts.every((p) => /pass(word|code)?\s*:?\s*$/i.test(p.prompt.trim()) && !p.echo);
+    kiRound++;
     if (prompts.length === 0) return finish([]);
-    if (allPassword && opts.password) return finish(prompts.map(() => opts.password!));
+    const answers: (string | undefined)[] = prompts.map((p) =>
+      kiRound === 1 && opts.password && isPasswordPrompt(p.prompt, !!p.echo) ? opts.password : undefined);
+    const toAsk = prompts.map((p, i) => ({ i, prompt: p.prompt, echo: !!p.echo })).filter((x) => answers[x.i] === undefined);
+    if (!toAsk.length) return finish(answers as string[]);
+    const askedPasswordAgain = kiRound > 1 && !!opts.password && prompts.some((p) => isPasswordPrompt(p.prompt, !!p.echo));
+    const note = askedPasswordAgain ? 'The bastion asked for the password again, so the saved SSH password may be wrong or expired.\n' : '';
     opts
-      .askPrompts(instructions, prompts.map((p) => ({ prompt: p.prompt, echo: !!p.echo })))
-      .then((answers) => finish(answers ?? prompts.map(() => '')))
+      .askPrompts(note + (instructions ?? ''), toAsk.map(({ prompt, echo }) => ({ prompt, echo })))
+      .then((typed) => {
+        toAsk.forEach((x, k) => { answers[x.i] = typed?.[k] ?? ''; });
+        finish(answers.map((a) => a ?? ''));
+      })
       .catch(() => finish(prompts.map(() => '')));
   });
 
