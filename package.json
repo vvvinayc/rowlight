@@ -1,0 +1,64 @@
+{
+  "name": "lumensql",
+  "productName": "LumenSQL",
+  "version": "0.7.1",
+  "description": "LumenSQL: light that reveals your data. Windows SQL client (MySQL / SQL Server) with SSH tunnels and Claude integration",
+  "author": "VinayC",
+  "main": "dist/main/main.js",
+  "private": true,
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node scripts/test.mjs",
+    "dist": "npm run typecheck && node scripts/build.mjs && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "local.litesql.client",
+    "productName": "LumenSQL",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "asarUnpack": [
+      "dist/bridge/**"
+    ]
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "mssql": "^12.8.0",
+    "mysql2": "^3.24.6",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/mssql": "^12.3.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ssh2": "^1.15.6",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "monaco-editor": "^0.57.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sql-formatter": "^15.10.0",
+    "typescript": "^7.0.2"
+  },
+  "license": "MIT"
+}
