@@ -12,6 +12,9 @@ interface Props {
   onClose(): void;
 }
 
+/** Password auth, not 'ask every time', but nothing saved → the bastion will prompt on every connect. */
+const noSecret = (p: SshProfile) => !p.askPassword && p.auth === 'password' && !!p.id && !p.hasSaved?.sshPassword;
+
 const blank = (isDefault: boolean): SshProfile => ({
   id: '', name: '', host: '', port: 22, user: '', auth: 'password', askPassword: false, isDefault,
 });
@@ -107,6 +110,7 @@ export function SshProfilesDialog({ profiles, initialId, onChanged, onClose }: P
               <div key={x.id} className={'sp-item' + (selId === x.id ? ' active' : '')} onClick={() => setSelId(x.id)}>
                 <div><b>{x.name}</b>{x.isDefault && <span className="badge def">default</span>}</div>
                 <div className="muted small">{x.user}@{x.host}:{x.port}</div>
+                {noSecret(x) && <div className="warn-note small">⚠ no password saved</div>}
               </div>
             ))}
             <button className={'sp-new' + (selId === 'new' ? ' active' : '')} onClick={() => setSelId('new')}>+ New SSH profile</button>
@@ -143,6 +147,9 @@ export function SshProfilesDialog({ profiles, initialId, onChanged, onClose }: P
                     onChange={(e) => setSecrets((s) => ({ ...s, sshPassphrase: e.target.value }))} />
                 </label>
               </>
+            )}
+            {current && noSecret(p) && !secrets.sshPassword && !secrets.sshPassphrase && (
+              <div className="warn-note small">⚠ No SSH {p.auth === 'key' ? 'key passphrase' : 'password'} is saved in this profile, so the bastion will ask for it on every connect. Type it above and click Save (or tick “Ask SSH password every time” if that is what you want).</div>
             )}
             <div className="checks">
               <label className="check"><input type="checkbox" checked={p.askPassword} onChange={(e) => set({ askPassword: e.target.checked })} /> Ask SSH password every time</label>

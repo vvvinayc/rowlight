@@ -89,7 +89,7 @@ export function ConnectionDialog({ initial, profiles, onManageProfiles, onProfil
       const p = await unwrap(api.ssh.saveProfile({
         id: '', name: `${c.ssh.user}@${c.ssh.host}`, host: c.ssh.host, port: c.ssh.port || 22, user: c.ssh.user, auth: c.ssh.auth,
         keyPath: c.ssh.keyPath, askPassword: c.askPassword, isDefault: !profiles.length,
-      }, Object.fromEntries(Object.entries({ sshPassword: secrets.sshPassword, sshPassphrase: secrets.sshPassphrase }).filter(([, v]) => v))));
+      }, Object.fromEntries(Object.entries({ sshPassword: secrets.sshPassword, sshPassphrase: secrets.sshPassphrase }).filter(([, v]) => v)), initial?.id));
       await onProfilesChanged();
       setSsh({ profileId: p.id });
       setStatus({ kind: 'ok', text: `Saved as SSH profile "${p.name}"${p.isDefault ? ' (default)' : ''}. Other connections can now pick it too. Rename it under "Manage SSH profiles".` });

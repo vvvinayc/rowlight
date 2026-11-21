@@ -310,3 +310,5 @@ legend { padding: 0 4px; }
 .sp-form { flex: 1; }
 .badge.def { background: var(--sel); color: var(--text); }
 .profile-summary { padding: 6px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
+.warn-note { color: var(--warn-text); background: var(--warn-bg2); padding: 4px 8px; border-radius: 4px; }
+.sp-item .warn-note { padding: 0; background: none; color: var(--warn); }

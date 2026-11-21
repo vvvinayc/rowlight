@@ -81,7 +81,7 @@ interface Api {
   exportResult(format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string): P<string | null>;
   ssh: {
     profiles(): P<SshProfile[]>;
-    saveProfile(p: SshProfile, secrets: Secrets): P<SshProfile>;
+    saveProfile(p: SshProfile, secrets: Secrets, fromConnectionId?: string): P<SshProfile>;
     deleteProfile(id: string): P<void>;
     profileUsage(id: string): P<string[]>;
     forgetProfileHostKey(id: string): P<void>;

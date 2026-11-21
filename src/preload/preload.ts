@@ -18,7 +18,7 @@ const api = {
   },
   ssh: {
     profiles: () => call('ssh:profiles'),
-    saveProfile: (p: unknown, secrets: unknown) => call('ssh:saveProfile', p, secrets),
+    saveProfile: (p: unknown, secrets: unknown, fromConnectionId?: string) => call('ssh:saveProfile', p, secrets, fromConnectionId),
     deleteProfile: (id: string) => call('ssh:deleteProfile', id),
     profileUsage: (id: string) => call('ssh:profileUsage', id),
     forgetProfileHostKey: (id: string) => call('ssh:forgetProfileHostKey', id),

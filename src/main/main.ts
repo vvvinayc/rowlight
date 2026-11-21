@@ -122,7 +122,14 @@ function registerIpc() {
   handle('connections:import', (filePath: string, passphrase: string | null) => importConnections(filePath, passphrase));
   // ---- saved SSH profiles ----
   handle('ssh:profiles', () => store.listProfiles());
-  handle('ssh:saveProfile', (p: SshProfile, secrets: Secrets) => store.saveProfile(p, secrets));
+  handle('ssh:saveProfile', async (p: SshProfile, secrets: Secrets, fromConnectionId?: string) => {
+    // "Save these SSH settings as a profile": bring the connection's already-saved SSH password / passphrase along.
+    if (fromConnectionId) {
+      const own = await store.getSavedSecrets(fromConnectionId);
+      secrets = { ...secrets, sshPassword: secrets?.sshPassword || own.sshPassword, sshPassphrase: secrets?.sshPassphrase || own.sshPassphrase };
+    }
+    return store.saveProfile(p, secrets);
+  });
   handle('ssh:deleteProfile', (id: string) => store.deleteProfile(id));
   handle('ssh:profileUsage', (id: string) => store.connectionsUsingProfile(id));
   handle('ssh:forgetProfileHostKey', (id: string) => store.setProfileFingerprint(id, undefined));

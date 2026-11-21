@@ -232,11 +232,13 @@ export function resolveConnection(cfg: ConnectionConfig): { cfg: ConnectionConfi
 export async function resolveSecrets(cfg: ConnectionConfig, typed: Secrets | undefined): Promise<Secrets> {
   const t = typed ?? {};
   const own = cfg.id ? await getSavedSecrets(cfg.id) : {};
-  const ssh = cfg.ssh?.enabled && cfg.ssh.profileId ? await getProfileSecrets(cfg.ssh.profileId) : own;
+  const prof = cfg.ssh?.enabled && cfg.ssh.profileId ? await getProfileSecrets(cfg.ssh.profileId) : {};
+  // Order: typed now → the profile's saved secret → the connection's own saved secret
+  // (fallback, e.g. a profile created from this connection before its password was copied).
   return {
     dbPassword: t.dbPassword || own.dbPassword,
-    sshPassword: t.sshPassword || ssh.sshPassword,
-    sshPassphrase: t.sshPassphrase || ssh.sshPassphrase,
+    sshPassword: t.sshPassword || prof.sshPassword || own.sshPassword,
+    sshPassphrase: t.sshPassphrase || prof.sshPassphrase || own.sshPassphrase,
   };
 }
 
