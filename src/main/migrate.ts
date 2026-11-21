@@ -15,7 +15,8 @@ import { addToDesktop, desktopStatus } from './claudeDesktop';
 import { addToCode, codeStatus } from './claudeCode';
 
 const OLD_NAMES = ['LumenSQL', 'LiteSQL']; // newest first
-const COPY = ['connections.json', 'ssh-profiles.json', 'settings.json', 'history', 'Local Storage'];
+// 'Local State' holds the key that encrypts saved passwords: without it they cannot be decrypted.
+const COPY = ['Local State', 'connections.json', 'ssh-profiles.json', 'settings.json', 'history', 'Local Storage'];
 
 export function migrateOldData(): string | null {
   const target = app.getPath('userData');

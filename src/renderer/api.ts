@@ -85,7 +85,7 @@ interface Api {
     deleteProfile(id: string): P<void>;
     profileUsage(id: string): P<string[]>;
     forgetProfileHostKey(id: string): P<void>;
-    testProfile(p: SshProfile, secrets: Secrets): P<{ fingerprint: string }>;
+    testProfile(p: SshProfile, secrets: Secrets): P<{ fingerprint: string; savedPassword: boolean; usedBy: number }>;
     answerPrompt(requestId: string, answers: string[] | null): P<void>;
   };
   on(event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed', cb: (payload: any) => void): () => void;

@@ -76,7 +76,11 @@ export function SshProfilesDialog({ profiles, initialId, onChanged, onClose }: P
     setStatus({ kind: 'busy', text: 'Logging in to the bastion…' });
     try {
       const r = await unwrap(api.ssh.testProfile(p, secrets));
-      setStatus({ kind: 'ok', text: `SSH login OK.\nHost key: ${r.fingerprint}` });
+      setStatus({
+        kind: 'ok',
+        text: `SSH login OK.${r.savedPassword ? ` Password saved in this profile: the ${r.usedBy} connection(s) using it will connect without asking.` : ''}\nHost key: ${r.fingerprint}`,
+      });
+      if (r.savedPassword) setSecrets({});
       if (p.id) await onChanged(p.id); // the host key may have been remembered
     } catch (e) {
       setStatus({ kind: 'err', text: errorText(e) });

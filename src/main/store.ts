@@ -242,6 +242,45 @@ export async function resolveSecrets(cfg: ConnectionConfig, typed: Secrets | und
   };
 }
 
+// ---------- repair of secrets encrypted by an older install ----------
+
+/**
+ * Re-encrypts saved secrets that this app's key cannot read but an older install's key can
+ * (see secretRepair.ts). `getLegacyKeys` is only called when such a secret exists.
+ * Returns how many secrets were repaired and how many stay unreadable.
+ */
+export async function repairSecrets(
+  getLegacyKeys: () => Buffer[],
+  decryptLegacy: (b64: string, key: Buffer) => string | undefined,
+): Promise<{ repaired: number; unreadable: number }> {
+  let keys: Buffer[] | undefined;
+  let repaired = 0;
+  let unreadable = 0;
+  const fix = async (bag: Record<string, string | undefined> | undefined): Promise<boolean> => {
+    let changed = false;
+    for (const k of Object.keys(bag ?? {})) {
+      const b64 = bag![k];
+      if (!b64 || (await decrypt(b64)) !== undefined) continue;
+      keys ??= getLegacyKeys();
+      const plain = keys.map((key) => decryptLegacy(b64, key)).find((x) => x !== undefined);
+      if (plain === undefined) { unreadable++; continue; }
+      bag![k] = await encrypt(plain);
+      repaired++;
+      changed = true;
+    }
+    return changed;
+  };
+  const conns = loadStored();
+  let connsChanged = false;
+  for (const c of conns) if (await fix(c.secrets as Record<string, string | undefined>)) connsChanged = true;
+  if (connsChanged) writeJson(connectionsFile(), conns);
+  const profiles = loadProfiles();
+  let profChanged = false;
+  for (const p of profiles) if (await fix(p.secrets as Record<string, string | undefined>)) profChanged = true;
+  if (profChanged) writeJson(profilesFile(), profiles);
+  return { repaired, unreadable };
+}
+
 // ---------- settings ----------
 
 const settingsFile = () => path.join(dataDir(), 'settings.json');

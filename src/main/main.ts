@@ -13,6 +13,7 @@ import { exportResult } from './exporter';
 import { exportConnections, importConnections, previewImport } from './connTransfer';
 import { McpShare } from './mcpServer';
 import { migrateOldData, relinkClaudeEntries } from './migrate';
+import { decryptV10, legacyKeys } from './secretRepair';
 import { addToCode, codeStatus, removeFromCode } from './claudeCode';
 import { addToDesktop, clearShares, desktopStatus, publishShare, removeFromDesktop, unpublishShare } from './claudeDesktop';
 import * as store from './store';
@@ -144,7 +145,16 @@ function registerIpc() {
     });
     t.close();
     if (p.id) trustHostKey('', p.id, t.fingerprint, p.hostFingerprint);
-    return { fingerprint: t.fingerprint };
+    // A password that just logged in successfully is saved into the (unchanged) profile, so every
+    // connection using the profile connects without asking.
+    let savedPassword = false;
+    const stored = p.id ? store.getProfile(p.id) : undefined;
+    const typedSecret = typed?.sshPassword || typed?.sshPassphrase;
+    if (stored && typedSecret && !stored.askPassword && stored.host === p.host && stored.port === p.port && stored.user === p.user && stored.auth === p.auth) {
+      await store.saveProfile(stored, { sshPassword: typed?.sshPassword || undefined, sshPassphrase: typed?.sshPassphrase || undefined });
+      savedPassword = true;
+    }
+    return { fingerprint: t.fingerprint, savedPassword, usedBy: p.id ? store.connectionsUsingProfile(p.id).length : 0 };
   });
   handle('connections:pickKeyFile', async () => {
     const r = await dialog.showOpenDialog(win!, { title: 'Select SSH private key', properties: ['openFile', 'showHiddenFiles'] });
@@ -279,8 +289,16 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   clearShares();
+  // Saved passwords copied from an older install (LiteSQL / LumenSQL) are encrypted with that install's
+  // key: re-encrypt them with ours before anything tries to connect.
+  try {
+    const r = await store.repairSecrets(legacyKeys, decryptV10);
+    if (r.repaired || r.unreadable) console.log(`Saved passwords: ${r.repaired} recovered from the previous install, ${r.unreadable} unreadable`);
+  } catch (e) {
+    console.error('Password repair failed:', e);
+  }
   registerProtocol();
   registerIpc();
   createWindow();

@@ -1,7 +1,7 @@
 {
   "name": "rowlight",
   "productName": "Rowlight",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Rowlight: shine a light on your rows. Safety-first Windows SQL client (MySQL / SQL Server) with SSH tunnels and Claude integration",
   "author": "VinayC",
   "main": "dist/main/main.js",
