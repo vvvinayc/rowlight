@@ -58,6 +58,8 @@ export function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [status, setStatus] = useState('Ready');
+  const [zoomPct, setZoomPct] = useState(100);
+  useEffect(() => api.on('zoom:changed', ({ percent }) => setZoomPct(percent)), []);
   const [theme, setTheme] = useState<ThemePref>(getThemePref());
   const THEME_NEXT: Record<ThemePref, ThemePref> = { system: 'light', light: 'dark', dark: 'system' };
   const THEME_LABEL: Record<ThemePref, string> = { system: '🖥 System', light: '☀ Light', dark: '🌙 Dark' };
@@ -336,6 +338,11 @@ export function App() {
         <button onClick={() => setShowSettings(true)}>Settings</button>
         <span className="spacer" />
         <span className="muted small">Auto-LIMIT: {settings.selectLimit || 'off'}</span>
+        <span className="zoom-ctl" title="Zoom: Ctrl + / Ctrl − / Ctrl 0, or Ctrl + mouse wheel">
+          <button onClick={() => api.zoom('out')}>A−</button>
+          <button onClick={() => api.zoom('reset')} title="Reset to 100%">{zoomPct}%</button>
+          <button onClick={() => api.zoom('in')}>A+</button>
+        </span>
         <button title="Theme: click to switch System → Light → Dark" onClick={() => changeTheme(THEME_NEXT[theme])}>{THEME_LABEL[theme]}</button>
       </div>
       <div className="main">

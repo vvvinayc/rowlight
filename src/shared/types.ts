@@ -66,6 +66,8 @@ export interface Secrets {
 export interface Settings {
   /** Rows to auto-LIMIT SELECTs to. 0 = off. */
   selectLimit: number;
+  /** Electron zoom level (0 = 100%, each step ≈ 10%). Set with Ctrl +/−/0 or Ctrl+mouse wheel. */
+  zoomLevel?: number;
 }
 
 export type ErrorKind =
@@ -111,6 +113,10 @@ export interface ResultSet {
   rows: unknown[][];
   /** True when the app appended LIMIT / SET ROWCOUNT and the cap was hit. */
   limitApplied: boolean;
+  /** Rows per page when the auto-LIMIT was applied (used by "load more"). */
+  pageLimit?: number;
+  /** Position of this result among the results of its statement / batch. */
+  setIndex?: number;
   /** Set when the rows come from one table with a primary key, so they can be edited. */
   edit?: EditInfo;
   /** Why the result cannot be edited (shown in the grid toolbar). */

@@ -55,6 +55,7 @@ interface Api {
   query: {
     run(id: string, tabId: string, sql: string): P<QueryRunResult>;
     cancel(id: string, tabId: string): P<void>;
+    fetchMore(id: string, tabId: string, sql: string, setIndex: number, offset: number, limit: number): P<{ rows: unknown[][]; hasMore: boolean }>;
     closeTab(id: string, tabId: string): P<void>;
     useDatabase(id: string, tabId: string, db: string): P<void>;
   };
@@ -76,6 +77,7 @@ interface Api {
   history: { get(id: string): P<HistoryEntry[]>; clear(id: string): P<void> };
   settings: { get(): P<Settings>; save(s: Settings): P<Settings> };
   copyText(text: string): P<void>;
+  zoom(what: 'in' | 'out' | 'reset'): P<void>;
   openFile(): P<{ path: string; content: string } | null>;
   saveFile(filePath: string | null, content: string, suggestedName: string): P<string | null>;
   exportResult(format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string): P<string | null>;
@@ -88,7 +90,7 @@ interface Api {
     testProfile(p: SshProfile, secrets: Secrets): P<{ fingerprint: string; savedPassword: boolean; usedBy: number }>;
     answerPrompt(requestId: string, answers: string[] | null): P<void>;
   };
-  on(event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed', cb: (payload: any) => void): () => void;
+  on(event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed' | 'zoom:changed', cb: (payload: any) => void): () => void;
 }
 
 export const api = (window as unknown as { api: Api }).api;

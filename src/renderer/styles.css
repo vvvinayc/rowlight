@@ -312,3 +312,9 @@ legend { padding: 0 4px; }
 .profile-summary { padding: 6px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
 .warn-note { color: var(--warn-text); background: var(--warn-bg2); padding: 4px 8px; border-radius: 4px; }
 .sp-item .warn-note { padding: 0; background: none; color: var(--warn); }
+.load-more-row { position: absolute; left: 0; right: 0; height: 40px; }
+.load-more { position: sticky; left: 0; display: inline-flex; align-items: center; height: 40px; padding: 0 8px 0 64px; font-family: "Segoe UI", sans-serif; }
+
+/* ---------- zoom ---------- */
+.zoom-ctl { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.zoom-ctl button { border: none; border-radius: 0; padding: 2px 7px; font-size: 12px; min-width: 30px; }

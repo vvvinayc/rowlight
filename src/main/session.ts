@@ -145,8 +145,11 @@ export class DbSession {
         try {
           const r = await this.driver.exec(tabId, sql);
           msg.durationMs = Date.now() - t0;
-          for (const rs of r.resultSets) {
-            const set: ResultSet = { sql: stmt, columns: rs.columns, rows: rs.rows, limitApplied: applied && rs.rows.length >= selectLimit };
+          for (const [setIndex, rs] of r.resultSets.entries()) {
+            const set: ResultSet = {
+              sql: stmt, columns: rs.columns, rows: rs.rows, limitApplied: applied && rs.rows.length >= selectLimit,
+              pageLimit: applied ? selectLimit : undefined, setIndex,
+            };
             out.results.push(set);
             totalRows += rs.rows.length;
             editCandidates.push({ set, stmt, sources: rs.sources, single: r.resultSets.length === 1 });
@@ -209,6 +212,29 @@ export class DbSession {
       else c.set.edit = info;
     } catch (e) {
       c.set.editBlocked = 'could not read table metadata: ' + toAppError(e).message;
+    }
+  }
+
+  /**
+   * "Load more": fetches the next page of a result that was cut by the auto-LIMIT.
+   * MySQL re-runs the statement with LIMIT n OFFSET k; SQL Server re-reads with a larger ROWCOUNT
+   * and returns only the new rows. Only for statements the auto-LIMIT applies to (plain reads).
+   */
+  async fetchMore(tabId: string, stmt: string, setIndex: number, offset: number, limit: number): Promise<{ rows: unknown[][]; hasMore: boolean }> {
+    if (this.busyTabs.has(tabId)) throw new AppFailure('db-error', 'A query is still running in this tab.');
+    const dialect = this.config.type;
+    const page = Math.max(1, Math.floor(limit));
+    const prepared = dialect === 'mysql' ? applyMysqlLimit(stmt, page, offset) : applyMssqlRowcount(stmt, offset + page);
+    if (!prepared.applied) throw new AppFailure('db-error', 'This result cannot be paged (it is not a plain SELECT).');
+    if (this.readOnly && checkReadOnly(stmt, dialect)) throw new AppFailure('readonly-blocked', 'Blocked by read-only mode.');
+    this.busyTabs.add(tabId);
+    try {
+      const r = await this.driver.exec(tabId, prepared.sql);
+      const all = r.resultSets[dialect === 'mysql' ? 0 : setIndex]?.rows ?? [];
+      const rows = dialect === 'mysql' ? all : all.slice(offset);
+      return { rows, hasMore: rows.length >= page };
+    } finally {
+      this.busyTabs.delete(tabId);
     }
   }
 

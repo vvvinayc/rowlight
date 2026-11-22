@@ -287,11 +287,18 @@ const settingsFile = () => path.join(dataDir(), 'settings.json');
 
 export function getSettings(): Settings {
   const s = readJson<Partial<Settings>>(settingsFile(), {});
-  return { selectLimit: typeof s.selectLimit === 'number' ? s.selectLimit : DEFAULT_SELECT_LIMIT };
+  return {
+    selectLimit: typeof s.selectLimit === 'number' ? s.selectLimit : DEFAULT_SELECT_LIMIT,
+    zoomLevel: typeof s.zoomLevel === 'number' ? s.zoomLevel : 0,
+  };
 }
 
-export function saveSettings(s: Settings): Settings {
-  const clean: Settings = { selectLimit: Math.max(0, Math.floor(Number(s.selectLimit) || 0)) };
+export function saveSettings(s: Partial<Settings>): Settings {
+  const cur = getSettings();
+  const clean: Settings = {
+    selectLimit: s.selectLimit === undefined ? cur.selectLimit : Math.max(0, Math.floor(Number(s.selectLimit) || 0)),
+    zoomLevel: s.zoomLevel === undefined ? cur.zoomLevel : Math.max(-3, Math.min(5, Number(s.zoomLevel) || 0)),
+  };
   writeJson(settingsFile(), clean);
   return clean;
 }

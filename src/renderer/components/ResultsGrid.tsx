@@ -23,6 +23,12 @@ interface Props {
   canEdit?: boolean;
   /** Short text shown in the toolbar about editability. */
   editNote?: string;
+  /** The result was cut by the auto-LIMIT and more rows can be fetched. */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  /** Rows fetched per page (the auto-LIMIT), shown on the button. */
+  pageSize?: number;
+  onLoadMore?(): void;
 }
 
 interface Cell { r: number; c: number }
@@ -47,7 +53,7 @@ function initialWidths(columns: string[], rows: unknown[][]): number[] {
   });
 }
 
-export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edit, canEdit, editNote }: Props) {
+export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edit, canEdit, editNote, hasMore, loadingMore, pageSize, onLoadMore }: Props) {
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filters, setFilters] = useState<string[]>(() => columns.map(() => ''));
   const [quick, setQuick] = useState('');
@@ -150,13 +156,20 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
     onStatus?.(`Copied ${n} cell${n === 1 ? '' : 's'}${withHeaders ? ' with headers' : ''}`);
   }
 
-  function ensureVisible(r: number) {
+  /** Scrolls so the cell (view row r, column c) is fully visible: up/down AND left/right. */
+  function ensureVisible(r: number, c?: number) {
     const el = scrollRef.current;
     if (!el) return;
     const top = r * ROW_H;
     const headerH = 2 * ROW_H;
     if (top < el.scrollTop) el.scrollTop = top;
     else if (top + ROW_H > el.scrollTop + el.clientHeight - headerH) el.scrollTop = top + ROW_H - el.clientHeight + headerH;
+    if (c === undefined) return;
+    // The row-number column is sticky on the left, so the visible data area starts after it.
+    const left = ROWNUM_W + widths.slice(0, c).reduce((a, b) => a + b, 0);
+    const right = left + widths[c];
+    if (left - ROWNUM_W < el.scrollLeft) el.scrollLeft = left - ROWNUM_W;
+    else if (right > el.scrollLeft + el.clientWidth) el.scrollLeft = Math.min(left - ROWNUM_W, right - el.clientWidth);
   }
 
   // ---------- editing ----------
@@ -187,6 +200,7 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
     setFocus(next);
     setAnchor(next);
     scrollRef.current?.focus();
+    ensureVisible(next.r, next.c);
   }
 
   function setNull() {
@@ -231,17 +245,29 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
       if (beginEdit(focus.r, focus.c, e.key)) e.preventDefault(); // start typing replaces the value
       return;
     }
-    const moves: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1], PageUp: [-20, 0], PageDown: [20, 0] };
-    const m = moves[e.key];
-    if (!m || !focus) return;
-    e.preventDefault();
-    const next = {
-      r: Math.max(0, Math.min(view.length - 1, focus.r + m[0])),
-      c: Math.max(0, Math.min(columns.length - 1, focus.c + m[1])),
+    const page = Math.max(1, Math.floor(((scrollRef.current?.clientHeight ?? 400) - 2 * ROW_H) / ROW_H) - 1);
+    const lastR = view.length - 1;
+    const lastC = columns.length - 1;
+    const cur = focus ?? { r: 0, c: 0 };
+    const targets: Record<string, () => Cell> = {
+      ArrowUp: () => ({ r: cur.r - 1, c: cur.c }),
+      ArrowDown: () => ({ r: cur.r + 1, c: cur.c }),
+      ArrowLeft: () => ({ r: cur.r, c: cur.c - 1 }),
+      ArrowRight: () => ({ r: cur.r, c: cur.c + 1 }),
+      PageUp: () => ({ r: cur.r - page, c: cur.c }),
+      PageDown: () => ({ r: cur.r + page, c: cur.c }),
+      Home: () => (ctrl ? { r: 0, c: 0 } : { r: cur.r, c: 0 }), // Home: first column, Ctrl+Home: first cell
+      End: () => (ctrl ? { r: lastR, c: lastC } : { r: cur.r, c: lastC }), // End: last column, Ctrl+End: last cell
     };
+    const t = targets[e.key];
+    if (!t || !view.length || !columns.length) return;
+    e.preventDefault();
+    const raw = focus ? t() : { r: 0, c: 0 }; // first key press selects the first cell
+    const next = { r: Math.max(0, Math.min(lastR, raw.r)), c: Math.max(0, Math.min(lastC, raw.c)) };
     setFocus(next);
     if (!e.shiftKey) setAnchor(next);
-    ensureVisible(next.r);
+    ensureVisible(next.r, next.c);
+    if (next.r === lastR && hasMore && !loadingMore) onLoadMore?.(); // reached the end of a limited result
   }
 
   async function doExport(format: 'csv' | 'xlsx') {
@@ -278,7 +304,12 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
         <button onClick={() => doExport('xlsx')}>Export Excel</button>
       </div>
       <div className="grid-scroll" ref={scrollRef} tabIndex={0} onKeyDown={onKeyDown}
-        onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}>
+        onScroll={(e) => {
+          const el = e.target as HTMLDivElement;
+          setScrollTop(el.scrollTop);
+          // Near the bottom of a limited result: fetch the next page automatically.
+          if (hasMore && !loadingMore && el.scrollTop > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 3 * ROW_H) onLoadMore?.();
+        }}>
         <div style={{ width: totalW, minWidth: '100%' }}>
           <div className="grid-head">
             <div className="grid-row">
@@ -301,7 +332,15 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
               ))}
             </div>
           </div>
-          <div style={{ height: view.length * ROW_H, position: 'relative' }}>
+          <div style={{ height: view.length * ROW_H + (hasMore ? 2 * ROW_H : 0), position: 'relative' }}>
+            {hasMore && (
+              <div className="load-more-row" style={{ top: view.length * ROW_H }}><div className="load-more">
+                <button onClick={() => onLoadMore?.()} disabled={loadingMore}>
+                  {loadingMore ? 'Loading more rows…' : `↓ Load ${pageSize ? 'next ' + pageSize.toLocaleString() : 'more'} rows`}
+                </button>
+                <span className="muted small">&nbsp;Scroll to the bottom to load automatically. Sort and filters apply to the rows loaded so far.</span>
+              </div></div>
+            )}
             {view.slice(first, last).map((rowIdx, k) => {
               const r = first + k;
               const state = edit?.rowState(rowIdx);

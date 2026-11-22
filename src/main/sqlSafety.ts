@@ -192,11 +192,12 @@ export function needsAutoLimit(stmt: string): boolean {
 }
 
 /** Appends " LIMIT n" after the last real token (so a trailing "-- comment" does not swallow it). */
-export function applyMysqlLimit(stmt: string, limit: number): { sql: string; applied: boolean } {
+export function applyMysqlLimit(stmt: string, limit: number, offset = 0): { sql: string; applied: boolean } {
   if (limit <= 0 || !needsAutoLimit(stmt)) return { sql: stmt, applied: false };
   const tokens = tokenize(stmt, 'mysql');
   const last = tokens[tokens.length - 1];
-  return { sql: stmt.slice(0, last.end) + ` LIMIT ${limit}` + stmt.slice(last.end), applied: true };
+  const clause = ` LIMIT ${Math.floor(limit)}` + (offset > 0 ? ` OFFSET ${Math.floor(offset)}` : '');
+  return { sql: stmt.slice(0, last.end) + clause + stmt.slice(last.end), applied: true };
 }
 
 /**

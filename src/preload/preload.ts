@@ -40,6 +40,8 @@ const api = {
   query: {
     run: (id: string, tabId: string, sql: string) => call('query:run', id, tabId, sql),
     cancel: (id: string, tabId: string) => call('query:cancel', id, tabId),
+    fetchMore: (id: string, tabId: string, sql: string, setIndex: number, offset: number, limit: number) =>
+      call('query:fetchMore', id, tabId, sql, setIndex, offset, limit),
     closeTab: (id: string, tabId: string) => call('query:closeTab', id, tabId),
     useDatabase: (id: string, tabId: string, db: string) => call('query:useDatabase', id, tabId, db),
   },
@@ -67,11 +69,12 @@ const api = {
     save: (s: unknown) => call('settings:save', s),
   },
   copyText: (text: string) => call('clipboard:write', text),
+  zoom: (what: 'in' | 'out' | 'reset') => call('zoom:set', what),
   openFile: () => call('file:open'),
   saveFile: (filePath: string | null, content: string, suggestedName: string) => call('file:save', filePath, content, suggestedName),
   exportResult: (format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string) =>
     call('export:result', format, columns, rows, name),
-  on: (event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed', cb: (payload: any) => void) => {
+  on: (event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed' | 'zoom:changed', cb: (payload: any) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload);
     ipcRenderer.on(event, listener);
     return () => ipcRenderer.removeListener(event, listener);

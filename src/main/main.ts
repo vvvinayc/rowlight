@@ -185,6 +185,8 @@ function registerIpc() {
   handle('meta:columns', (id: string, db: string, table: string) => session(id).driver.listColumns(db, table));
 
   handle('query:run', (id: string, tabId: string, sql: string) => session(id).run(tabId, sql, store.getSettings().selectLimit));
+  handle('query:fetchMore', (id: string, tabId: string, sql: string, setIndex: number, offset: number, limit: number) =>
+    session(id).fetchMore(tabId, sql, setIndex, offset, limit));
   handle('query:cancel', (id: string, tabId: string) => session(id).cancel(tabId));
   handle('query:closeTab', async (id: string, tabId: string) => { await sessions.get(id)?.driver.closeTab(tabId); });
   handle('query:useDatabase', (id: string, tabId: string, db: string) => session(id).driver.useDatabase(tabId, db));
@@ -236,6 +238,7 @@ function registerIpc() {
   handle('history:clear', (id: string) => store.clearHistory(id));
 
   handle('settings:get', () => store.getSettings());
+  handle('zoom:set', (what: 'in' | 'out' | 'reset') => (what === 'reset' ? setZoom(0) : zoomBy(what === 'in' ? 1 : -1)));
   handle('settings:save', (s) => store.saveSettings(s as any));
 
   handle('export:result', (format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string) =>
@@ -262,6 +265,19 @@ function registerProtocol() {
   });
 }
 
+// ---------- zoom (remembered in settings.json) ----------
+const ZOOM_STEP = 0.5; // ≈ 10 % per step
+function setZoom(level: number) {
+  if (!win) return;
+  const clamped = Math.max(-3, Math.min(5, Math.round(level * 2) / 2)); // ≈ 57 % … 250 %
+  win.webContents.setZoomLevel(clamped);
+  store.saveSettings({ zoomLevel: clamped });
+  win.webContents.send('zoom:changed', { percent: Math.round(Math.pow(1.2, clamped) * 100) });
+}
+function zoomBy(steps: number) {
+  if (win) setZoom(win.webContents.getZoomLevel() + steps * ZOOM_STEP);
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1400,
@@ -281,10 +297,25 @@ function createWindow() {
   win.setMenu(null);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
-  win.webContents.on('before-input-event', (_e, input) => {
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type === 'keyDown' && input.control && !input.alt) {
+      // Zoom everything (text, grid, editor): Ctrl + / Ctrl − / Ctrl 0 (main keyboard or numpad)
+      if (['=', '+', 'Add'].includes(input.key)) { e.preventDefault(); zoomBy(1); return; }
+      if (['-', '_', 'Subtract'].includes(input.key)) { e.preventDefault(); zoomBy(-1); return; }
+      if (input.key === '0' && !input.shift) { e.preventDefault(); setZoom(0); return; }
+    }
     if (input.type === 'keyDown' && input.key === 'F12') win?.webContents.toggleDevTools();
     if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'r') win?.webContents.reloadIgnoringCache();
   });
+  // Ctrl + mouse wheel
+  let lastWheelZoom = 0;
+  win.webContents.on('zoom-changed', (_e, direction) => {
+    const now = Date.now();
+    if (now - lastWheelZoom < 80) return; // one wheel notch can fire this twice: one step per notch
+    lastWheelZoom = now;
+    zoomBy(direction === 'in' ? 1 : -1);
+  });
+  win.webContents.on('did-finish-load', () => setZoom(store.getSettings().zoomLevel ?? 0));
   win.loadURL('app://local/index.html');
   win.on('closed', () => { win = null; });
 }

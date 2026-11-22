@@ -84,6 +84,29 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
     if (session) metaCache.databases(conn.id).catch(() => {});
   }, [session, conn.id]);
   const lastSql = useRef('');
+
+  // ---------- load more (results cut by the auto-LIMIT) ----------
+  const [paging, setPaging] = useState<Record<number, { hasMore: boolean; loading: boolean }>>({});
+  useEffect(() => {
+    setPaging(Object.fromEntries((result?.results ?? []).map((rs, i) => [i, { hasMore: rs.limitApplied && !!rs.pageLimit && !!rs.sql, loading: false }])));
+  }, [result]);
+  async function loadMore(i: number) {
+    const rs = result?.results[i];
+    const pg = paging[i];
+    if (!rs || !rs.sql || !rs.pageLimit || !pg?.hasMore || pg.loading || running) return;
+    setPaging((p) => ({ ...p, [i]: { ...p[i], loading: true } }));
+    try {
+      const r = await unwrap(api.query.fetchMore(conn.id, tab.id, rs.sql, rs.setIndex ?? 0, rs.rows.length, rs.pageLimit));
+      // Same result object (so the grid keeps sort / filters / scroll), new rows array (so React re-renders).
+      rs.rows = rs.rows.concat(r.rows);
+      setPaging((p) => ({ ...p, [i]: { hasMore: r.hasMore, loading: false } }));
+      onStatus(r.rows.length ? `Loaded ${r.rows.length.toLocaleString()} more rows (${rs.rows.length.toLocaleString()} in total)` : 'No more rows');
+    } catch (e) {
+      setError(errorText(e));
+      setPaging((p) => ({ ...p, [i]: { hasMore: false, loading: false } }));
+    }
+  }
+
   const [saving, setSaving] = useState(false);
   const [showSql, setShowSql] = useState(false);
   const [sqlPreview, setSqlPreview] = useState<string[]>([]);
@@ -285,7 +308,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
             )
           ) : result?.results.map((rs, i) => (
             <button key={i} className={view === i ? 'active' : ''} onClick={() => setView(i)} title={rs.sql}>
-              Result {i + 1} <span className="muted">({rs.rows.length.toLocaleString()}{rs.limitApplied ? ', limited' : ''})</span>
+              Result {i + 1} <span className="muted">({rs.rows.length.toLocaleString()}{rs.limitApplied && paging[i]?.hasMore !== false ? ', more available' : ''})</span>
             </button>
           ))}
           <button className={view === 'messages' ? 'active' : ''} onClick={() => setView('messages')}>Messages</button>
@@ -322,6 +345,10 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
                     edit={rs === single ? edits.api : undefined}
                     canEdit={!readOnly}
                     editNote={editNote(rs, single, readOnly)}
+                    hasMore={paging[i]?.hasMore}
+                    loadingMore={paging[i]?.loading}
+                    pageSize={rs.pageLimit}
+                    onLoadMore={() => loadMore(i)}
                   />
                 </div>
               ))}
@@ -336,6 +363,10 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
               edit={current === single ? edits.api : undefined}
               canEdit={!readOnly}
               editNote={editNote(current, single, readOnly)}
+              hasMore={typeof view === 'number' ? paging[view]?.hasMore : false}
+              loadingMore={typeof view === 'number' ? paging[view]?.loading : false}
+              pageSize={current.pageLimit}
+              onLoadMore={() => typeof view === 'number' && loadMore(view)}
             />
           ) : view === 'messages' && result ? (
             <div className="messages">
