@@ -12,6 +12,7 @@ import { QueryTab, type EditorHandle, type TabState } from './components/QueryTa
 import { HistoryPanel } from './components/HistoryPanel';
 import { ConfirmDialog, PasswordPrompt, SettingsDialog, SshPromptDialog, type PromptNeeds } from './components/Dialogs';
 import { SshProfilesDialog } from './components/SshProfilesDialog';
+import { UpdateBar } from './components/UpdateBar';
 import { ShareDialog } from './components/ShareDialog';
 import { ExportDialog, ImportDialog } from './components/TransferDialogs';
 import { TableDetailsDialog } from './components/TableDetailsDialog';
@@ -345,6 +346,7 @@ export function App() {
         </span>
         <button title="Theme: click to switch System → Light → Dark" onClick={() => changeTheme(THEME_NEXT[theme])}>{THEME_LABEL[theme]}</button>
       </div>
+      <UpdateBar />
       <div className="main">
         <Sidebar
           connections={connections}

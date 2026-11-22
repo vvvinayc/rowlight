@@ -129,6 +129,17 @@ The installer isn't code-signed, so Windows SmartScreen may warn: *More info →
 
 Your data lives in `%APPDATA%\Rowlight` (connections, SSH profiles, settings, history).
 
+### Updates
+
+From version 0.11.0, Rowlight updates itself from GitHub Releases. In *Settings → Updates* choose:
+
+- **Download new versions automatically** (default): the update downloads in the background, and a bar offers
+  *Restart & update* (otherwise it installs when you close Rowlight).
+- **Tell me when a new version is available**: a bar with a *Download* button.
+- **Don't check automatically**: use *Check for updates now* whenever you like.
+
+Versions before 0.11.0 don't have the updater: install 0.11.0 (or newer) once by hand.
+
 ## Build from source
 
 Requires **Node.js 22.18+** on Windows.

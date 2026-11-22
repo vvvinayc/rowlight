@@ -1,7 +1,7 @@
 {
   "name": "rowlight",
   "productName": "Rowlight",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Rowlight: shine a light on your rows. Safety-first Windows SQL client (MySQL / SQL Server) with SSH tunnels and Claude integration",
   "author": "VinayC",
   "main": "dist/main/main.js",
@@ -33,13 +33,23 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "asarUnpack": [
       "dist/bridge/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "vvvinayc",
+        "repo": "rowlight",
+        "releaseType": "release"
+      }
     ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "exceljs": "^4.4.0",
     "mssql": "^12.8.0",
     "mysql2": "^3.24.6",

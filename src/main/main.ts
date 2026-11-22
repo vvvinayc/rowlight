@@ -14,6 +14,7 @@ import { exportConnections, importConnections, previewImport } from './connTrans
 import { McpShare } from './mcpServer';
 import { migrateOldData, relinkClaudeEntries } from './migrate';
 import { decryptV10, legacyKeys } from './secretRepair';
+import * as updater from './updater';
 import { addToCode, codeStatus, removeFromCode } from './claudeCode';
 import { addToDesktop, clearShares, desktopStatus, publishShare, removeFromDesktop, unpublishShare } from './claudeDesktop';
 import * as store from './store';
@@ -239,7 +240,17 @@ function registerIpc() {
 
   handle('settings:get', () => store.getSettings());
   handle('zoom:set', (what: 'in' | 'out' | 'reset') => (what === 'reset' ? setZoom(0) : zoomBy(what === 'in' ? 1 : -1)));
-  handle('settings:save', (s) => store.saveSettings(s as any));
+  handle('settings:save', (s) => {
+    const saved = store.saveSettings(s as any);
+    if ((s as any)?.autoUpdate) updater.setMode(saved.autoUpdate ?? 'auto');
+    return saved;
+  });
+  handle('app:version', () => app.getVersion());
+  handle('update:status', () => updater.updateStatus());
+  handle('update:check', () => updater.checkNow(true));
+  handle('update:download', () => updater.download());
+  handle('update:install', () => updater.installNow());
+  handle('update:openReleases', () => updater.openReleases());
 
   handle('export:result', (format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string) =>
     exportResult(win!, format, columns, rows, name));
@@ -334,6 +345,7 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   relinkClaudeEntries((m) => console.log(m)).catch((e) => console.error(e));
+  updater.initUpdater(() => win, store.getSettings().autoUpdate ?? 'auto');
 });
 
 app.on('window-all-closed', async () => {

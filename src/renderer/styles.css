@@ -318,3 +318,10 @@ legend { padding: 0 4px; }
 /* ---------- zoom ---------- */
 .zoom-ctl { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
 .zoom-ctl button { border: none; border-radius: 0; padding: 2px 7px; font-size: 12px; min-width: 30px; }
+
+/* ---------- updates ---------- */
+.update-bar { display: flex; align-items: center; gap: 10px; padding: 5px 10px; background: var(--sel); border-bottom: 1px solid var(--accent); }
+.update-bar.downloaded { background: var(--ok-bg); border-bottom-color: var(--ok-border); }
+.update-progress { width: 160px; height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+.update-progress span { display: block; height: 100%; background: var(--accent); }
+.update-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

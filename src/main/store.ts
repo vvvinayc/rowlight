@@ -290,6 +290,7 @@ export function getSettings(): Settings {
   return {
     selectLimit: typeof s.selectLimit === 'number' ? s.selectLimit : DEFAULT_SELECT_LIMIT,
     zoomLevel: typeof s.zoomLevel === 'number' ? s.zoomLevel : 0,
+    autoUpdate: s.autoUpdate === 'notify' || s.autoUpdate === 'off' ? s.autoUpdate : 'auto',
   };
 }
 
@@ -298,6 +299,7 @@ export function saveSettings(s: Partial<Settings>): Settings {
   const clean: Settings = {
     selectLimit: s.selectLimit === undefined ? cur.selectLimit : Math.max(0, Math.floor(Number(s.selectLimit) || 0)),
     zoomLevel: s.zoomLevel === undefined ? cur.zoomLevel : Math.max(-3, Math.min(5, Number(s.zoomLevel) || 0)),
+    autoUpdate: s.autoUpdate === 'auto' || s.autoUpdate === 'notify' || s.autoUpdate === 'off' ? s.autoUpdate : cur.autoUpdate,
   };
   writeJson(settingsFile(), clean);
   return clean;

@@ -70,11 +70,19 @@ const api = {
   },
   copyText: (text: string) => call('clipboard:write', text),
   zoom: (what: 'in' | 'out' | 'reset') => call('zoom:set', what),
+  appVersion: () => call('app:version'),
+  update: {
+    status: () => call('update:status'),
+    check: () => call('update:check'),
+    download: () => call('update:download'),
+    install: () => call('update:install'),
+    openReleases: () => call('update:openReleases'),
+  },
   openFile: () => call('file:open'),
   saveFile: (filePath: string | null, content: string, suggestedName: string) => call('file:save', filePath, content, suggestedName),
   exportResult: (format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string) =>
     call('export:result', format, columns, rows, name),
-  on: (event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed' | 'zoom:changed', cb: (payload: any) => void) => {
+  on: (event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed' | 'zoom:changed' | 'update:status', cb: (payload: any) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload);
     ipcRenderer.on(event, listener);
     return () => ipcRenderer.removeListener(event, listener);

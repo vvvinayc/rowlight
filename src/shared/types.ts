@@ -68,6 +68,19 @@ export interface Settings {
   selectLimit: number;
   /** Electron zoom level (0 = 100%, each step ≈ 10%). Set with Ctrl +/−/0 or Ctrl+mouse wheel. */
   zoomLevel?: number;
+  /** Automatic updates from GitHub Releases. Default "auto". */
+  autoUpdate?: UpdateMode;
+}
+
+export type UpdateMode = 'auto' | 'notify' | 'off';
+
+export interface UpdateStatus {
+  state: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error';
+  currentVersion: string;
+  /** The newer version, when there is one. */
+  version?: string;
+  percent?: number;
+  error?: string;
 }
 
 export type ErrorKind =

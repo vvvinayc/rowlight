@@ -1,7 +1,7 @@
 // Typed access to the preload API. Every call returns Result<T>; `unwrap` throws an ApiError instead.
 
 import type {
-  AppError, ChangeSet, TableDetails, SshProfile, ColumnInfo, McpShareInfo, ConnectionConfig, HistoryEntry, QueryRunResult, Result, Secrets, SessionInfo, Settings, TableInfo,
+  AppError, ChangeSet, TableDetails, SshProfile, UpdateStatus, ColumnInfo, McpShareInfo, ConnectionConfig, HistoryEntry, QueryRunResult, Result, Secrets, SessionInfo, Settings, TableInfo,
 } from '../shared/types';
 
 type P<T> = Promise<Result<T>>;
@@ -78,6 +78,14 @@ interface Api {
   settings: { get(): P<Settings>; save(s: Settings): P<Settings> };
   copyText(text: string): P<void>;
   zoom(what: 'in' | 'out' | 'reset'): P<void>;
+  appVersion(): P<string>;
+  update: {
+    status(): P<UpdateStatus>;
+    check(): P<UpdateStatus>;
+    download(): P<void>;
+    install(): P<void>;
+    openReleases(): P<void>;
+  };
   openFile(): P<{ path: string; content: string } | null>;
   saveFile(filePath: string | null, content: string, suggestedName: string): P<string | null>;
   exportResult(format: 'csv' | 'xlsx', columns: string[], rows: unknown[][], name: string): P<string | null>;
@@ -90,7 +98,7 @@ interface Api {
     testProfile(p: SshProfile, secrets: Secrets): P<{ fingerprint: string; savedPassword: boolean; usedBy: number }>;
     answerPrompt(requestId: string, answers: string[] | null): P<void>;
   };
-  on(event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed' | 'zoom:changed', cb: (payload: any) => void): () => void;
+  on(event: 'ssh:prompt' | 'session:closed' | 'history:changed' | 'mcp:changed' | 'zoom:changed' | 'update:status', cb: (payload: any) => void): () => void;
 }
 
 export const api = (window as unknown as { api: Api }).api;
