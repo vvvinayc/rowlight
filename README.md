@@ -45,6 +45,10 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 ### Query editor
 - Monaco editor (the editor from VS Code) with SQL highlighting.
 - **Autocomplete** for tables, columns and aliases (`o.` lists the columns of `orders o`).
+- **Automatic table aliases:** picking a table after `FROM` / `JOIN` inserts `loan_accounts la`; with several tables, columns are
+  suggested as `la.amount`.
+- **JOIN help:** after `JOIN customers c ON`, ready-made conditions such as `la.customer_id = c.id` are suggested, from
+  foreign keys, or from column names (`customer_id` → `customers.id`) when the schema has none.
 - **Ctrl+Enter** runs the selection, or the whole script; **Cancel** stops a running query (`KILL QUERY` / TDS cancel).
 - **Format SQL** (Ctrl+Shift+F) for MySQL and T-SQL.
 - Multiple tabs (**Ctrl+E**), **open / save `.sql` files** (Ctrl+O / Ctrl+S), and tabs **restored** after a restart.
@@ -52,6 +56,8 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 
 ### Results
 - Fast **virtual-scrolling grid** that stays smooth with 100k+ rows.
+- **Load more:** a result cut by the auto-LIMIT loads the next page when you scroll to the bottom (or click *Load next N rows*).
+- Full **keyboard navigation**: arrows, Home / End, Ctrl+Home / Ctrl+End, PageUp / PageDown; the selected cell always stays visible.
 - Sort, per-column filters and a quick filter; select cells; Ctrl+C / Ctrl+Shift+C (with headers).
 - **Tabs or stacked** results: several result sets shown one below the other, like SSMS.
 - **Export to CSV and Excel** (`.xlsx`, numbers stored as numbers).
@@ -75,6 +81,7 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 
 ### Look & feel
 - **Light, dark or "follow Windows"** theme.
+- **Zoom** everything with Ctrl + / Ctrl − / Ctrl 0 or Ctrl + mouse wheel (remembered).
 
 ## Claude integration (MCP)
 
@@ -151,6 +158,8 @@ If Electron says it failed to install, run `node node_modules/electron/install.j
 | Ctrl+O / Ctrl+S / Ctrl+Shift+S | Open / save / save as `.sql` |
 | Ctrl+Shift+F | Format SQL |
 | Ctrl+Space | Autocomplete |
+| Ctrl + = / Ctrl + − / Ctrl + 0 | Zoom in / out / reset (also Ctrl + mouse wheel) |
+| Home / End, Ctrl+Home / Ctrl+End | First / last column, first / last cell (results grid) |
 | F2 / Enter, Delete | Edit cell, set NULL (in an editable grid) |
 | Ctrl+C / Ctrl+Shift+C | Copy cells / with headers |
 
