@@ -14,6 +14,7 @@ import 'monaco-editor/languages/definitions/mysql/register.js';
 import 'monaco-editor/languages/definitions/sql/register.js';
 import { format as formatSqlText } from 'sql-formatter';
 import { metaCache } from './metaCache';
+import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType } from '../shared/types';
 
 (self as any).MonacoEnvironment = {
@@ -51,35 +52,9 @@ const KEYWORDS = [
 
 const unquote = (s: string) => s.replace(/^[`\["]|[`\]"]$/g, '');
 
-/** alias/table name (lower-case) -> { db, table } from FROM/JOIN clauses in the script. */
-function referencedTables(text: string, defaultDb: string, type: DbType) {
-  const map = new Map<string, { db: string; table: string }>();
-  const ident = '[`\\["]?[\\w$]+[`\\]"]?';
-  const re = new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO)\\s+((?:${ident}\\.){0,2}${ident})(?:\\s+(?:AS\\s+)?([\\w$]+))?`, 'gi');
-  const reserved = /^(WHERE|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|GROUP|ORDER|LIMIT|SET|VALUES|SELECT|UNION|HAVING|USING)$/i;
-  for (const m of text.matchAll(re)) {
-    const parts = m[1].split('.').map(unquote);
-    let db = defaultDb;
-    let table: string;
-    if (type === 'mysql') {
-      table = parts[parts.length - 1];
-      if (parts.length > 1) db = parts[0];
-    } else {
-      // SQL Server: [db.]schema.table, tables are stored as "schema.table"
-      if (parts.length === 3) { db = parts[0]; table = parts[1] + '.' + parts[2]; }
-      else if (parts.length === 2) table = parts.join('.');
-      else table = 'dbo.' + parts[0];
-    }
-    const entry = { db, table };
-    map.set(parts[parts.length - 1].toLowerCase(), entry);
-    if (m[2] && !reserved.test(m[2])) map.set(m[2].toLowerCase(), entry);
-  }
-  return map;
-}
-
 const provider: monaco.languages.CompletionItemProvider = {
-  triggerCharacters: ['.'],
-  async provideCompletionItems(model, position) {
+  triggerCharacters: ['.', ' '],
+  async provideCompletionItems(model, position, context) {
     const ctx = contexts.get(model.uri.toString());
     const word = model.getWordUntilPosition(position);
     const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
@@ -88,15 +63,23 @@ const provider: monaco.languages.CompletionItemProvider = {
     if (!ctx) return { suggestions };
 
     const db = ctx.getDatabase();
-    const before = model.getValueInRange(new monaco.Range(position.lineNumber, 1, position.lineNumber, word.startColumn));
-    const dotMatch = before.match(/([`\["]?[\w$]+[`\]"]?)\.$/);
-    const text = model.getValue();
-    const refs = referencedTables(text, db, ctx.type);
+    const lineBefore = model.getValueInRange(new monaco.Range(position.lineNumber, 1, position.lineNumber, word.startColumn));
+    const textBefore = model.getValueInRange(new monaco.Range(1, 1, position.lineNumber, word.startColumn));
+    // A space only opens suggestions right after FROM / JOIN / ON (not while typing normally).
+    if (context.triggerCharacter === ' ' && !/\b(FROM|JOIN|ON)\s$/i.test(textBefore) && !/,\s$/.test(textBefore)) return { suggestions };
+    const dotMatch = lineBefore.match(/([`\["]?[\w$]+[`\]"]?)\.$/);
+    const refs = parseTableRefs(model.getValue(), db, ctx.type);
+    const byName = new Map<string, TableRef>();
+    for (const r of refs) {
+      byName.set(baseName(r.table).toLowerCase(), r);
+      byName.set(r.qualifier.toLowerCase(), r);
+    }
 
     try {
+      // ---- "x." → columns of the table behind alias x (or tables of database x) ----
       if (dotMatch) {
         const qualifier = unquote(dotMatch[1]);
-        const ref = refs.get(qualifier.toLowerCase());
+        const ref = byName.get(qualifier.toLowerCase());
         if (ref) {
           for (const c of await metaCache.columns(ctx.connectionId, ref.db, ref.table)) {
             suggestions.push({ label: c.name, kind: K.Field, detail: c.type, insertText: c.name, range, sortText: '0' });
@@ -105,36 +88,82 @@ const provider: monaco.languages.CompletionItemProvider = {
         }
         const dbs = metaCache.peekDatabases(ctx.connectionId) ?? [];
         if (dbs.some((d) => d.toLowerCase() === qualifier.toLowerCase())) {
+          const taken = refs.map((r) => r.qualifier);
           for (const t of await metaCache.tables(ctx.connectionId, qualifier)) {
-            suggestions.push({ label: t.name, kind: K.Struct, insertText: t.name, range });
+            const alias = isTablePosition(textBefore.slice(0, -(qualifier.length + 1))) ? makeAlias(t.name, taken) : '';
+            suggestions.push({ label: t.name, kind: K.Struct, detail: alias ? 'alias ' + alias : undefined, insertText: alias ? t.name + ' ' + alias : t.name, range });
           }
           return { suggestions };
         }
         if (ctx.type === 'mssql' && db) {
-          // schema prefix, e.g. "dbo."
           for (const t of await metaCache.tables(ctx.connectionId, db)) {
             if (t.name.toLowerCase().startsWith(qualifier.toLowerCase() + '.')) {
               const name = t.name.slice(qualifier.length + 1);
               suggestions.push({ label: name, kind: K.Struct, insertText: name, range });
             }
           }
-          return { suggestions };
         }
         return { suggestions };
       }
 
-      if (db) {
-        for (const t of await metaCache.tables(ctx.connectionId, db)) {
-          suggestions.push({ label: t.name, kind: t.kind === 'view' ? K.Interface : K.Struct, detail: t.kind, insertText: t.name, range, sortText: '1' + t.name });
+      // ---- after FROM / JOIN / comma: table names, inserted WITH an alias ("loan_accounts la") ----
+      if (isTablePosition(textBefore)) {
+        const taken = refs.map((r) => r.qualifier);
+        if (db) {
+          for (const t of await metaCache.tables(ctx.connectionId, db)) {
+            const alias = makeAlias(t.name, taken);
+            suggestions.push({
+              label: { label: t.name, description: alias },
+              kind: t.kind === 'view' ? K.Interface : K.Struct,
+              detail: (t.kind === 'view' ? 'view' : 'table') + ' · alias ' + alias,
+              insertText: t.name + ' ' + alias,
+              filterText: t.name,
+              range,
+              sortText: '0' + t.name,
+            });
+          }
         }
+        for (const d of metaCache.peekDatabases(ctx.connectionId) ?? []) {
+          suggestions.push({ label: d, kind: K.Module, detail: 'database', insertText: d, range, sortText: '3' + d });
+        }
+        return { suggestions };
       }
+
+      // ---- "JOIN t x ON " → join conditions (foreign keys, then naming conventions) ----
+      const before = parseTableRefs(textBefore, db, ctx.type);
+      const ti = joinOnTarget(textBefore, before);
+      if (ti >= 0) {
+        const target = before[ti];
+        const earlier = before.filter((r, i) => i !== ti && r.index < target.index);
+        const colsOf = (r: TableRef) => metaCache.columns(ctx.connectionId, r.db, r.table).catch(() => []);
+        const [targetCols, ...otherCols] = await Promise.all([colsOf(target), ...earlier.map(colsOf)]);
+        const fkLists = await Promise.all([target, ...earlier].map((r) => metaCache.foreignKeys(ctx.connectionId, r.db, r.table).catch(() => [])));
+        const conds = suggestJoinConditions(target, targetCols, earlier.map((ref, i) => ({ ref, cols: otherCols[i] })), fkLists.flat());
+        conds.forEach((cond, i) => suggestions.push({
+          label: cond, kind: K.Reference, detail: 'join condition', insertText: cond, range, sortText: '00' + String(i).padStart(3, '0'),
+        }));
+      }
+
+      // ---- columns: "alias.column" when several tables are used, plus plain names ----
+      const distinct = [...new Map(refs.map((r) => [r.qualifier.toLowerCase(), r])).values()];
       const seen = new Set<string>();
-      for (const ref of new Set(refs.values())) {
+      for (const ref of distinct) {
         const cols = await metaCache.columns(ctx.connectionId, ref.db, ref.table).catch(() => []);
         for (const c of cols) {
+          if (distinct.length > 1 || ref.alias) {
+            suggestions.push({
+              label: ref.qualifier + '.' + c.name, kind: K.Field, detail: baseName(ref.table) + ' · ' + c.type,
+              insertText: ref.qualifier + '.' + c.name, filterText: c.name + ' ' + ref.qualifier + '.' + c.name, range, sortText: '0a' + c.name,
+            });
+          }
           if (seen.has(c.name)) continue;
           seen.add(c.name);
-          suggestions.push({ label: c.name, kind: K.Field, detail: `${ref.table} · ${c.type}`, insertText: c.name, range, sortText: '0' + c.name });
+          suggestions.push({ label: c.name, kind: K.Field, detail: baseName(ref.table) + ' · ' + c.type, insertText: c.name, range, sortText: '0b' + c.name });
+        }
+      }
+      if (db) {
+        for (const t of metaCache.peekTables(ctx.connectionId, db) ?? []) {
+          suggestions.push({ label: t.name, kind: t.kind === 'view' ? K.Interface : K.Struct, detail: t.kind, insertText: t.name, range, sortText: '1' + t.name });
         }
       }
       for (const d of metaCache.peekDatabases(ctx.connectionId) ?? []) {

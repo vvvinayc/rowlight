@@ -1,6 +1,7 @@
 // Caches database / table / column lists per connection. Used by the sidebar tree and autocomplete.
 
 import type { ColumnInfo, TableInfo } from '../shared/types';
+import type { ForeignKey } from '../shared/sqlAssist';
 import { api, unwrap } from './api';
 
 interface ConnCache {
@@ -11,6 +12,7 @@ interface ConnCache {
 }
 
 const caches = new Map<string, ConnCache>();
+const fkCache = new Map<string, ForeignKey[]>();
 const listeners = new Set<() => void>();
 
 function cache(connId: string): ConnCache {
@@ -42,6 +44,7 @@ function once<T>(c: ConnCache, key: string, load: () => Promise<T>): Promise<T> 
 export const metaCache = {
   clear(connId: string) {
     caches.delete(connId);
+    for (const k of [...fkCache.keys()]) if (k.startsWith(connId)) fkCache.delete(k);
     notify();
   },
   peekDatabases: (connId: string) => caches.get(connId)?.databases,
@@ -66,6 +69,21 @@ export const metaCache = {
       const list = await unwrap(api.meta.tables(connId, db));
       c.tables.set(db, list);
       notify();
+      return list;
+    });
+  },
+
+  /** Foreign keys of a table, both directions (used for JOIN ... ON suggestions). */
+  async foreignKeys(connId: string, db: string, table: string): Promise<ForeignKey[]> {
+    const c = cache(connId);
+    const key = 'fk:' + db + '\u0000' + table;
+    const hit = fkCache.get(connId + key);
+    if (hit) return hit;
+    return once(c, key, async () => {
+      const d = await unwrap(api.meta.tableDetails(connId, db, table));
+      const split = (x: string) => x.split(',').map((y) => y.trim()).filter(Boolean);
+      const list = d.foreignKeys.map((k) => ({ table: k.table, columns: split(k.columns), refTable: k.refTable, refColumns: split(k.refColumns) }));
+      fkCache.set(connId + key, list);
       return list;
     });
   },
