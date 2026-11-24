@@ -49,6 +49,20 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
   suggested as `la.amount`.
 - **JOIN help:** after `JOIN customers c ON`, ready-made conditions such as `la.customer_id = c.id` are suggested, from
   foreign keys, or from column names (`customer_id` → `customers.id`) when the schema has none.
+- **No database selected?** After `FROM`, tables of every database are offered fully named
+  (`utility_stagging.upload_batch ub`), without running a query first.
+- **Smart suggestions (offline, no AI)**, each one can be switched off in **Settings → Smart features**:
+  - **Clause-aware:** columns and aggregates after `SELECT`, columns, operators and date functions after `WHERE`,
+    "all non-aggregated columns" after `GROUP BY`, `SELECT` aliases (`cnt DESC`) after `ORDER BY`.
+  - **SQL functions with hints:** `DATE_FORMAT(date, '%Y-%m-%d')`, `COALESCE`, `TIMESTAMPDIFF`, `ROW_NUMBER() OVER …`
+    with what they do; MySQL or SQL Server versions as fits the connection.
+  - **Snippets:** `sel`, `cnt`, `dup` (find duplicates), `grp`, `top`, `today`, `month`, `latestper`, `miss`
+    (rows without a match), `upd`, `del`, `ins`, `lj`, `case`, `exists`, `between`.
+  - **Learns from your history:** tables and columns you use most come first, and **joins you wrote before are
+    remembered** (`cu.id = l.customer_id · you used this 12×`), even when the schema has no foreign keys.
+  - **Did you mean…?** `Unknown column 'la.custmer_id'` → one click on `customer_id` fixes the query and runs it again.
+  - **Safety hints:** warnings for `UPDATE` / `DELETE` without `WHERE` (asked again before running), `JOIN` without
+    `ON`, and `SELECT *` without `WHERE` on tables with millions of rows.
 - **Ctrl+Enter** runs the selection, or the whole script; **Cancel** stops a running query (`KILL QUERY` / TDS cancel).
 - **Format SQL** (Ctrl+Shift+F) for MySQL and T-SQL.
 - Multiple tabs (**Ctrl+E**), **open / save `.sql` files** (Ctrl+O / Ctrl+S), and tabs **restored** after a restart.
@@ -73,7 +87,7 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 ![Inline editing](docs/screenshots/inline-editing.png)
 
 ### Schema browser
-- Databases → tables → columns tree with search.
+- Databases → tables → columns tree; the search looks through **all databases**.
 - **Table details**: size, row count, columns (defaults, comments), indexes, foreign keys **in both directions**, and
   the `CREATE` statement.
 
@@ -162,12 +176,16 @@ If Electron says it failed to install, run `node node_modules/electron/install.j
 
 ## Keyboard shortcuts
 
+Press **F1** (or the **⌨ Shortcuts** button) in the app for the full, searchable list.
+
 | Keys | Action |
 |---|---|
 | Ctrl+Enter | Run selection (or whole script) |
 | Ctrl+E / Ctrl+W | New tab / close tab |
 | Ctrl+O / Ctrl+S / Ctrl+Shift+S | Open / save / save as `.sql` |
 | Ctrl+Shift+F | Format SQL |
+| Ctrl+R | Hide / show the results panel (running a query shows it again) |
+| F1 | All keyboard shortcuts |
 | Ctrl+Space | Autocomplete |
 | Ctrl + = / Ctrl + − / Ctrl + 0 | Zoom in / out / reset (also Ctrl + mouse wheel) |
 | Home / End, Ctrl+Home / Ctrl+End | First / last column, first / last cell (results grid) |

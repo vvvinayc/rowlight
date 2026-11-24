@@ -1,7 +1,9 @@
 // Small modal dialogs: password prompt, SSH keyboard-interactive prompt, settings, confirm.
 
 import React, { useState } from 'react';
-import type { ConnectionConfig, Secrets, Settings, SshPromptRequest, UpdateMode, UpdateStatus } from '../../shared/types';
+import type { ConnectionConfig, Secrets, Settings, SshPromptRequest, UpdateMode, UpdateStatus, SmartSettings } from '../../shared/types';
+import { SMART_KEYS, SMART_LABELS } from '../../shared/defaults';
+import { smartFrom } from '../smart';
 import { api, unwrap } from '../api';
 import { useEffect } from 'react';
 import type { ThemePref } from '../theme';
@@ -77,6 +79,9 @@ export function SettingsDialog({ settings, theme, onTheme, onSave, onCancel }:
   { settings: Settings; theme: ThemePref; onTheme(t: ThemePref): void; onSave(s: Settings): void; onCancel(): void }) {
   const [limit, setLimit] = useState(String(settings.selectLimit));
   const [mode, setMode] = useState<UpdateMode>(settings.autoUpdate ?? 'auto');
+  const [smartOn, setSmartOn] = useState<SmartSettings>(() => smartFrom(settings));
+  const allOff = SMART_KEYS.every((k) => !smartOn[k]);
+  const setAll = (v: boolean) => setSmartOn(Object.fromEntries(SMART_KEYS.map((k) => [k, v])) as unknown as SmartSettings);
   const [version, setVersion] = useState('');
   const [upd, setUpd] = useState<UpdateStatus | null>(null);
   useEffect(() => {
@@ -91,7 +96,7 @@ export function SettingsDialog({ settings, theme, onTheme, onSave, onCancel }:
   }[upd.state];
   return (
     <div className="modal-backdrop">
-      <form className="modal" onSubmit={(e) => { e.preventDefault(); onSave({ selectLimit: Number(limit) || 0, autoUpdate: mode }); }}>
+      <form className="modal" onSubmit={(e) => { e.preventDefault(); onSave({ selectLimit: Number(limit) || 0, autoUpdate: mode, smart: smartOn }); }}>
         <h3>Settings</h3>
         <div className="form">
           <label>Theme
@@ -112,6 +117,18 @@ export function SettingsDialog({ settings, theme, onTheme, onSave, onCancel }:
               <option value="off">Don't check automatically</option>
             </select>
           </label>
+          <fieldset className="smart-box">
+            <legend>Smart features <span className="muted small">(work offline, no AI)</span></legend>
+            {SMART_KEYS.map((k) => (
+              <label key={k} className="check" title={SMART_LABELS[k][1]}>
+                <input type="checkbox" checked={smartOn[k]} onChange={(e) => setSmartOn({ ...smartOn, [k]: e.target.checked })} />
+                <span>{SMART_LABELS[k][0]} <span className="muted small">— {SMART_LABELS[k][1]}</span></span>
+              </label>
+            ))}
+            <div className="smart-all">
+              <button type="button" onClick={() => setAll(allOff)}>{allOff ? 'All on' : 'All off'}</button>
+            </div>
+          </fieldset>
           <div className="update-row">
             <button type="button" onClick={() => api.update.check()} disabled={upd?.state === 'checking' || upd?.state === 'downloading'}>Check for updates now</button>
             <button type="button" className="link" onClick={() => api.update.openReleases()}>Release notes</button>

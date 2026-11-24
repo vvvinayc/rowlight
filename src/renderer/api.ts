@@ -49,6 +49,7 @@ interface Api {
   meta: {
     databases(id: string): P<string[]>;
     tables(id: string, db: string): P<TableInfo[]>;
+    allTables(id: string): P<{ db: string; tables: TableInfo[] }[]>;
     columns(id: string, db: string, table: string): P<ColumnInfo[]>;
     tableDetails(id: string, db: string, table: string): P<TableDetails>;
   };

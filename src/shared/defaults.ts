@@ -7,6 +7,17 @@ export function defaultReadOnlyForName(name: string): boolean {
 }
 
 export const DEFAULT_SELECT_LIMIT = 1000;
+
+/** Smart editor features (Settings → Smart features), all on by default. */
+export const SMART_KEYS = ['clauseAware', 'functions', 'snippets', 'history', 'didYouMean', 'safety'] as const;
+export const SMART_LABELS: Record<(typeof SMART_KEYS)[number], [title: string, detail: string]> = {
+  clauseAware: ['Clause-aware suggestions', 'Different suggestions after SELECT, WHERE, GROUP BY, ORDER BY'],
+  functions: ['SQL functions with hints', 'COUNT, DATE_FORMAT, COALESCE… with how to use them'],
+  snippets: ['Snippets', 'sel, cnt, dup, grp, top, month, miss… expand into a full query'],
+  history: ['Learn from my history', 'Rank tables / columns / joins by use; remember my own joins'],
+  didYouMean: ['Did-you-mean fixes', 'One-click fix for a misspelled column or table in an error'],
+  safety: ['Safety hints', 'UPDATE/DELETE without WHERE, JOIN without ON, SELECT * on big tables'],
+};
 export const DEFAULT_PORTS = { mysql: 3306, mssql: 1433 } as const;
 
 /** Connection colours (shown on the sidebar, tabs and toolbar). Readable in both themes. */

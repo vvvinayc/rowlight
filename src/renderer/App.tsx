@@ -10,6 +10,8 @@ import { Sidebar } from './components/Sidebar';
 import { ConnectionDialog } from './components/ConnectionDialog';
 import { QueryTab, type EditorHandle, type TabState } from './components/QueryTab';
 import { HistoryPanel } from './components/HistoryPanel';
+import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { invalidateUsage, setSmartSettings } from './smart';
 import { ConfirmDialog, PasswordPrompt, SettingsDialog, SshPromptDialog, type PromptNeeds } from './components/Dialogs';
 import { SshProfilesDialog } from './components/SshProfilesDialog';
 import { UpdateBar } from './components/UpdateBar';
@@ -57,7 +59,9 @@ export function App() {
   const [settings, setSettings] = useState<Settings>({ selectLimit: DEFAULT_SELECT_LIMIT });
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
+  useEffect(() => { invalidateUsage(); }, [historyVersion]); // re-learn tables / columns / joins from the new history
   const [status, setStatus] = useState('Ready');
   const [zoomPct, setZoomPct] = useState(100);
   useEffect(() => api.on('zoom:changed', ({ percent }) => setZoomPct(percent)), []);
@@ -83,7 +87,7 @@ export function App() {
   useEffect(() => {
     reloadConnections().catch((e) => setStatus(errorText(e)));
     reloadProfiles().catch(() => {});
-    unwrap(api.settings.get()).then(setSettings).catch(() => {});
+    unwrap(api.settings.get()).then((s) => { setSmartSettings(s); setSettings(s); }).catch(() => {});
     const offPrompt = api.on('ssh:prompt', (req: SshPromptRequest) => setSshPrompts((q) => [...q, req]));
     const reloadShares = () => unwrap(api.mcp.list())
       .then((list) => setShares(Object.fromEntries(list.map((i) => [i.connectionId, i]))))
@@ -220,6 +224,11 @@ export function App() {
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // F1 anywhere; Ctrl+/ outside the editor (inside it, Ctrl+/ comments the line).
+      const inEditor = !!(e.target as HTMLElement)?.closest?.('.monaco-editor');
+      if ((e.key === 'F1' && !e.ctrlKey && !e.altKey && !e.shiftKey) || (e.ctrlKey && e.key === '/' && !inEditor)) {
+        e.preventDefault(); e.stopPropagation(); setShowShortcuts((v) => !v); return;
+      }
       if (!e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'e' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); shortcuts.current.newTab(); }
@@ -336,6 +345,7 @@ export function App() {
         <button onClick={() => saveFile(false)} disabled={!activeTabId} title="Save to a .sql file (Ctrl+S, Ctrl+Shift+S = Save as)">Save</button>
         <button className={showHistory ? 'active' : ''} onClick={() => setShowHistory((v) => !v)}>History</button>
         <button onClick={() => setProfilesDialog({})} title="Saved SSH bastions shared by many connections">SSH profiles</button>
+        <button onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (F1)">⌨ Shortcuts</button>
         <button onClick={() => setShowSettings(true)}>Settings</button>
         <span className="spacer" />
         <span className="muted small">Auto-LIMIT: {settings.selectLimit || 'off'}</span>
@@ -397,7 +407,7 @@ export function App() {
                 <h2>Rowlight</h2>
                 <p>1. Add a connection with <b>+ New</b> in the sidebar (SSH tunnel optional).</p>
                 <p>2. Click <b>Connect</b>. A query tab opens automatically.</p>
-                <p>Ctrl+E new tab · Ctrl+Enter run · Ctrl+W close tab · Ctrl+O open · Ctrl+S save · Ctrl+Shift+F format</p>
+                <p>Ctrl+E new tab · Ctrl+Enter run · Ctrl+R hide/show results · Ctrl+W close tab · Ctrl+S save · F1 all shortcuts</p>
               </div>
             )}
             {tabs.map((t) => {
@@ -499,9 +509,10 @@ export function App() {
         <ImportDialog preview={importPreview} onCancel={() => setImportPreview(null)}
           onDone={async (msg) => { setImportPreview(null); setStatus(msg); await reloadConnections(); }} />
       )}
+      {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
       {showSettings && (
         <SettingsDialog settings={settings} theme={theme} onTheme={changeTheme} onCancel={() => setShowSettings(false)}
-          onSave={async (s) => { setSettings(await unwrap(api.settings.save(s))); setShowSettings(false); }} />
+          onSave={async (s) => { const saved = await unwrap(api.settings.save(s)); setSmartSettings(saved); invalidateUsage(); setSettings(saved); setShowSettings(false); }} />
       )}
       {confirm && <ConfirmDialog {...confirm} onCancel={() => setConfirm(null)} />}
       {alert && <ConfirmDialog title={alert.title} text={alert.text} okText="OK" alertOnly onOk={() => setAlert(null)} onCancel={() => setAlert(null)} />}

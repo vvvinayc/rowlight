@@ -182,6 +182,7 @@ function registerIpc() {
 
   handle('meta:databases', (id: string) => session(id).driver.listDatabases());
   handle('meta:tables', (id: string, db: string) => session(id).driver.listTables(db));
+  handle('meta:allTables', (id: string) => session(id).driver.listAllTables());
   handle('meta:tableDetails', (id: string, db: string, table: string) => session(id).driver.tableDetails(db, table));
   handle('meta:columns', (id: string, db: string, table: string) => session(id).driver.listColumns(db, table));
 

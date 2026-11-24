@@ -81,8 +81,21 @@ export async function createMysqlDriver(p: ConnectParams, where: string): Promis
     },
     async listTables(db) {
       const rows = await meta(
-        'SELECT TABLE_NAME, TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME', [db]);
-      return rows.map((r): TableInfo => ({ name: String(r[0]), kind: String(r[1]).includes('VIEW') ? 'view' : 'table' }));
+        'SELECT TABLE_NAME, TABLE_TYPE, TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME', [db]);
+      return rows.map((r): TableInfo => ({ name: String(r[0]), kind: String(r[1]).includes('VIEW') ? 'view' : 'table', rows: r[2] == null ? undefined : Number(r[2]) }));
+    },
+    async listAllTables() {
+      const rows = await meta(
+        "SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE, TABLE_ROWS FROM information_schema.TABLES " +
+        "WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') " +
+        'ORDER BY TABLE_SCHEMA, TABLE_NAME LIMIT 50000');
+      const byDb = new Map<string, TableInfo[]>();
+      for (const r of rows) {
+        const list = byDb.get(String(r[0])) ?? [];
+        list.push({ name: String(r[1]), kind: String(r[2]).includes('VIEW') ? 'view' : 'table', rows: r[3] == null ? undefined : Number(r[3]) });
+        byDb.set(String(r[0]), list);
+      }
+      return [...byDb].map(([db, tables]) => ({ db, tables }));
     },
     async listColumns(db, table) {
       const rows = await meta(

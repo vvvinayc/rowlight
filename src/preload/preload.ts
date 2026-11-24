@@ -34,6 +34,7 @@ const api = {
   meta: {
     databases: (id: string) => call('meta:databases', id),
     tables: (id: string, db: string) => call('meta:tables', id, db),
+    allTables: (id: string) => call('meta:allTables', id),
     columns: (id: string, db: string, table: string) => call('meta:columns', id, db, table),
     tableDetails: (id: string, db: string, table: string) => call('meta:tableDetails', id, db, table),
   },

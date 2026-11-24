@@ -6,6 +6,10 @@ import { api, unwrap } from './api';
 
 interface ConnCache {
   databases?: string[];
+  /** Every database's tables were loaded in one go. */
+  allTablesLoaded?: boolean;
+  /** Last error while loading the database list (shown in the DB dropdown). */
+  dbError?: string;
   tables: Map<string, TableInfo[]>;
   columns: Map<string, ColumnInfo[]>; // key: db + '\u0000' + table
   pending: Map<string, Promise<unknown>>;
@@ -48,16 +52,37 @@ export const metaCache = {
     notify();
   },
   peekDatabases: (connId: string) => caches.get(connId)?.databases,
+  peekDbError: (connId: string) => caches.get(connId)?.dbError,
+  isLoadingDatabases: (connId: string) => !!caches.get(connId)?.pending.has('dbs'),
+
+  /** Tables of all databases (one metadata query on MySQL); also fills each database's table list. */
+  async allTables(connId: string): Promise<void> {
+    const c = cache(connId);
+    if (c.allTablesLoaded) return;
+    await once(c, 'all', async () => {
+      for (const { db, tables } of await unwrap(api.meta.allTables(connId))) c.tables.set(db, tables);
+      c.allTablesLoaded = true;
+      notify();
+    });
+  },
   peekTables: (connId: string, db: string) => caches.get(connId)?.tables.get(db),
   peekColumns: (connId: string, db: string, table: string) => caches.get(connId)?.columns.get(db + '\u0000' + table),
 
   async databases(connId: string, refresh = false): Promise<string[]> {
     const c = cache(connId);
     if (c.databases && !refresh) return c.databases;
+    notify(); // shows "Loading databases…"
     return once(c, 'dbs', async () => {
-      c.databases = await unwrap(api.meta.databases(connId));
-      notify();
-      return c.databases;
+      try {
+        c.databases = await unwrap(api.meta.databases(connId));
+        c.dbError = undefined;
+        return c.databases;
+      } catch (e) {
+        c.dbError = String((e as Error)?.message ?? e);
+        throw e;
+      } finally {
+        setTimeout(notify, 0);
+      }
     });
   },
 

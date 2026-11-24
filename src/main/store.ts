@@ -6,8 +6,8 @@ import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import type { ConnectionConfig, HistoryEntry, Secrets, Settings, SshProfile } from '../shared/types';
-import { DEFAULT_SELECT_LIMIT } from '../shared/defaults';
+import type { ConnectionConfig, HistoryEntry, Secrets, Settings, SmartSettings, SshProfile } from '../shared/types';
+import { DEFAULT_SELECT_LIMIT, SMART_KEYS } from '../shared/defaults';
 
 interface StoredConnection extends Omit<ConnectionConfig, 'hasSaved'> {
   /** base64 of safeStorage.encryptString(...) */
@@ -291,7 +291,19 @@ export function getSettings(): Settings {
     selectLimit: typeof s.selectLimit === 'number' ? s.selectLimit : DEFAULT_SELECT_LIMIT,
     zoomLevel: typeof s.zoomLevel === 'number' ? s.zoomLevel : 0,
     autoUpdate: s.autoUpdate === 'notify' || s.autoUpdate === 'off' ? s.autoUpdate : 'auto',
+    smart: cleanSmart(s.smart),
   };
+}
+
+/** Only known switches, as booleans (missing = on). */
+function cleanSmart(v: unknown): Partial<SmartSettings> {
+  const out: Partial<SmartSettings> = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const k of SMART_KEYS) {
+    const x = (v as Record<string, unknown>)[k];
+    if (typeof x === 'boolean') out[k] = x;
+  }
+  return out;
 }
 
 export function saveSettings(s: Partial<Settings>): Settings {
@@ -300,6 +312,7 @@ export function saveSettings(s: Partial<Settings>): Settings {
     selectLimit: s.selectLimit === undefined ? cur.selectLimit : Math.max(0, Math.floor(Number(s.selectLimit) || 0)),
     zoomLevel: s.zoomLevel === undefined ? cur.zoomLevel : Math.max(-3, Math.min(5, Number(s.zoomLevel) || 0)),
     autoUpdate: s.autoUpdate === 'auto' || s.autoUpdate === 'notify' || s.autoUpdate === 'off' ? s.autoUpdate : cur.autoUpdate,
+    smart: s.smart === undefined ? cur.smart : cleanSmart(s.smart),
   };
   writeJson(settingsFile(), clean);
   return clean;

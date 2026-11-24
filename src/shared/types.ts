@@ -70,6 +70,23 @@ export interface Settings {
   zoomLevel?: number;
   /** Automatic updates from GitHub Releases. Default "auto". */
   autoUpdate?: UpdateMode;
+  /** Offline editor helpers; each can be switched off (Settings → Smart features). Missing = on. */
+  smart?: Partial<SmartSettings>;
+}
+
+export interface SmartSettings {
+  /** Suggestions that fit the clause (SELECT / WHERE / GROUP BY / ORDER BY …). */
+  clauseAware: boolean;
+  /** SQL functions with usage hints. */
+  functions: boolean;
+  /** Snippets such as sel, cnt, dup. */
+  snippets: boolean;
+  /** Rank tables / columns / joins by how often you used them, and remember your own joins. */
+  history: boolean;
+  /** "Did you mean …?" fixes for misspelled columns / tables in errors. */
+  didYouMean: boolean;
+  /** Warnings: UPDATE/DELETE without WHERE, JOIN without ON, SELECT * on big tables. */
+  safety: boolean;
 }
 
 export type UpdateMode = 'auto' | 'notify' | 'off';
@@ -117,6 +134,8 @@ export interface TableInfo {
   /** For SQL Server this is "schema.table". */
   name: string;
   kind: 'table' | 'view';
+  /** Approximate row count (MySQL statistics), when known. */
+  rows?: number;
 }
 
 export interface ResultSet {

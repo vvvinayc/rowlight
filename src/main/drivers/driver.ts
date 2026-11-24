@@ -39,6 +39,8 @@ export interface Driver {
   serverVersion(): Promise<string>;
   listDatabases(): Promise<string[]>;
   listTables(database: string): Promise<TableInfo[]>;
+  /** Tables of every user database in one go (for autocomplete / search without a default database). */
+  listAllTables(): Promise<{ db: string; tables: TableInfo[] }[]>;
   listColumns(database: string, table: string): Promise<ColumnInfo[]>;
   tableDetails(database: string, table: string): Promise<TableDetails>;
   /** Runs ONE statement (MySQL) or ONE batch (SQL Server) on the tab's dedicated connection. */

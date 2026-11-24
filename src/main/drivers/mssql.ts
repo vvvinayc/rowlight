@@ -172,6 +172,18 @@ export async function createMssqlDriver(p: ConnectParams, where: string): Promis
         ddlNote: 'Generated from the SQL Server catalog (columns, primary key, foreign keys, indexes). Check constraints, triggers and permissions are not included.',
       };
     },
+    async listAllTables() {
+      // SQL Server has no cross-database catalog: read up to 40 accessible user databases one by one.
+      const dbs = (await meta("SELECT name FROM sys.databases WHERE HAS_DBACCESS(name) = 1 AND database_id > 4 ORDER BY name")).map((r) => String(r.name)).slice(0, 40);
+      const out: { db: string; tables: TableInfo[] }[] = [];
+      for (const db of dbs) {
+        try {
+          const rows = await meta(`SELECT TABLE_SCHEMA + '.' + TABLE_NAME AS name, TABLE_TYPE AS type FROM ${quoteName(db)}.INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA, TABLE_NAME`);
+          out.push({ db, tables: rows.map((r): TableInfo => ({ name: r.name, kind: String(r.type).includes('VIEW') ? 'view' : 'table' })) });
+        } catch { /* no access to this one */ }
+      }
+      return out;
+    },
     async listColumns(db, table) {
       const dot = table.indexOf('.');
       const schema = dot > 0 ? table.slice(0, dot) : 'dbo';

@@ -34,6 +34,11 @@ export function Sidebar(p: Props) {
   useEffect(() => subscribe(rerender), []);
 
   const q = search.trim().toLowerCase();
+  // Searching looks through every database, so load all table lists once (one metadata query).
+  useEffect(() => {
+    if (!q) return;
+    for (const id of Object.keys(p.sessions)) metaCache.allTables(id).catch(() => {});
+  }, [!!q, p.sessions]);
 
   // Auto-open the connection + default database when a session starts.
   const seen = useRef(new Set<string>());
@@ -80,7 +85,7 @@ export function Sidebar(p: Props) {
         <button title="Export connections to a file" onClick={p.onExport} disabled={!p.connections.length}>Export</button>
         <button title="New connection" onClick={p.onNew}>+ New</button>
       </div>
-      <input className="sidebar-search" placeholder="Search tables (in opened databases)…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <input className="sidebar-search" placeholder="Search tables in all databases…" value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="tree">
         {p.connections.length === 0 && <div className="muted pad">No connections yet. Click “+ New”.</div>}
         {p.connections.map((c) => {
