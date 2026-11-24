@@ -79,6 +79,46 @@ export function parseTableRefs(text: string, defaultDb: string, type: DbType): T
   return out;
 }
 
+/**
+ * The statement the cursor is in: the text between the previous and next ";" or blank line
+ * (ignoring those inside strings, quoted names and comments). Autocomplete only looks at this
+ * statement, so aliases and columns of other queries in the same tab don't interfere.
+ */
+export function statementAt(text: string, offset: number): { start: number; end: number } {
+  const bounds: number[] = []; // positions where a statement ends (exclusive) / the next begins
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === '-' && next === '-') { while (i < n && text[i] !== '\n') i++; continue; }
+    if (c === '#') { while (i < n && text[i] !== '\n') i++; continue; }
+    if (c === '/' && next === '*') { const e = text.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; continue; }
+    if (c === "'" || c === '"' || c === '`' || c === '[') {
+      const close = c === '[' ? ']' : c;
+      i++;
+      while (i < n && text[i] !== close) i += text[i] === '\\' && c !== '[' ? 2 : 1;
+      i++;
+      continue;
+    }
+    if (c === ';') { bounds.push(i + 1); i++; continue; }
+    if (c === '\n') {
+      // blank line: newline, optional spaces/tabs, newline
+      let j = i + 1;
+      while (j < n && (text[j] === ' ' || text[j] === '\t' || text[j] === '\r')) j++;
+      if (text[j] === '\n') { bounds.push(j + 1); i = j + 1; continue; }
+    }
+    i++;
+  }
+  let start = 0;
+  let end = n;
+  for (const b of bounds) {
+    if (b <= offset) start = b;
+    else { end = b; break; }
+  }
+  return { start, end };
+}
+
 /** Is the cursor where a table name is expected (after FROM, JOIN, or a comma in the FROM list)? */
 export function isTablePosition(textBeforeWord: string): boolean {
   if (/\b(FROM|JOIN)\s+$/i.test(textBeforeWord)) return true;

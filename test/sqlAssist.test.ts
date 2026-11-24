@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTablePosition, joinOnTarget, makeAlias, parseTableRefs, suggestJoinConditions } from '../src/shared/sqlAssist';
+import { isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions } from '../src/shared/sqlAssist';
+
+test('statementAt: the query under the cursor, split on ; and blank lines (not inside strings/comments)', () => {
+  const text = "SELECT * FROM customers c WHERE c.name = 'a;b';\nSELECT * FROM loans l\n\nSELECT 1 -- ; not here\nFROM dual";
+  const at = (needle: string) => { const o = text.indexOf(needle); const r = statementAt(text, o); return text.slice(r.start, r.end).trim(); };
+  assert.equal(at('customers'), "SELECT * FROM customers c WHERE c.name = 'a;b';");
+  assert.equal(at('loans'), 'SELECT * FROM loans l');
+  assert.equal(at('dual'), 'SELECT 1 -- ; not here\nFROM dual');
+  // a new query typed after the others only sees itself
+  const t2 = 'SELECT * FROM customers c;\nSELECT * FROM ';
+  const r = statementAt(t2, t2.length);
+  assert.equal(t2.slice(r.start, r.end).trim(), 'SELECT * FROM');
+  assert.deepEqual(parseTableRefs(t2.slice(r.start), 'x', 'mysql'), []);
+});
 import type { ColumnInfo } from '../src/shared/types';
 
 test('makeAlias: initials, unique, never a keyword', () => {

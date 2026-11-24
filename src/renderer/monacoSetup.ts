@@ -14,7 +14,7 @@ import 'monaco-editor/languages/definitions/mysql/register.js';
 import 'monaco-editor/languages/definitions/sql/register.js';
 import { format as formatSqlText } from 'sql-formatter';
 import { metaCache } from './metaCache';
-import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
+import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType } from '../shared/types';
 
 (self as any).MonacoEnvironment = {
@@ -64,11 +64,15 @@ const provider: monaco.languages.CompletionItemProvider = {
 
     const db = ctx.getDatabase();
     const lineBefore = model.getValueInRange(new monaco.Range(position.lineNumber, 1, position.lineNumber, word.startColumn));
-    const textBefore = model.getValueInRange(new monaco.Range(1, 1, position.lineNumber, word.startColumn));
+    // Only the statement under the cursor counts (other queries in the tab must not affect aliases/columns).
+    const full = model.getValue();
+    const wordStart = model.getOffsetAt({ lineNumber: position.lineNumber, column: word.startColumn });
+    const stmt = statementAt(full, wordStart);
+    const textBefore = full.slice(stmt.start, wordStart);
     // A space only opens suggestions right after FROM / JOIN / ON (not while typing normally).
     if (context.triggerCharacter === ' ' && !/\b(FROM|JOIN|ON)\s$/i.test(textBefore) && !/,\s$/.test(textBefore)) return { suggestions };
     const dotMatch = lineBefore.match(/([`\["]?[\w$]+[`\]"]?)\.$/);
-    const refs = parseTableRefs(model.getValue(), db, ctx.type);
+    const refs = parseTableRefs(full.slice(stmt.start, stmt.end), db, ctx.type);
     const byName = new Map<string, TableRef>();
     for (const r of refs) {
       byName.set(baseName(r.table).toLowerCase(), r);
