@@ -169,9 +169,10 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     });
     editorRef.current = editor;
     (hostRef.current as any).__editor = editor; // handy for debugging from DevTools
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => runRef.current());
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE, () => newTabRef.current());
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, () => doFormatRef.current());
+    // Ctrl+Enter is handled by a window listener below. editor.addCommand registers shortcuts globally, so with
+    // several tabs open the most recently created editor received them and the visible tab did not run.
+    // addAction is scoped to this editor instance.
+    editor.addAction({ id: 'rowlight.format', label: 'Format SQL', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF], run: () => doFormatRef.current() });
     onRegister(tab.id, {
       insert(text) {
         const sel = editor.getSelection();
@@ -209,7 +210,17 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   // Ctrl+R: hide / show the results panel (capture phase, so it also works while the editor has focus).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!activeRef.current || !e.ctrlKey || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'r') return;
+      if (!activeRef.current || !e.ctrlKey || e.shiftKey || e.altKey) return;
+      // Ctrl+Enter: run the visible tab, wherever the focus is (editor, results grid, DB list...), but not
+      // behind an open dialog or while a grid cell is being edited.
+      if (e.key === 'Enter') {
+        const t = e.target as HTMLElement | null;
+        if (document.querySelector('.modal-backdrop') || t?.closest?.('.grid-cell.editing')) return;
+        e.preventDefault(); e.stopPropagation();
+        runRef.current();
+        return;
+      }
+      if (e.key.toLowerCase() !== 'r') return;
       e.preventDefault(); e.stopPropagation();
       toggleResultsRef.current();
     };
