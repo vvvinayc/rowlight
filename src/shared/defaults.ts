@@ -9,7 +9,7 @@ export function defaultReadOnlyForName(name: string): boolean {
 export const DEFAULT_SELECT_LIMIT = 1000;
 
 /** Smart editor features (Settings → Smart features), all on by default. */
-export const SMART_KEYS = ['clauseAware', 'functions', 'snippets', 'history', 'didYouMean', 'safety'] as const;
+export const SMART_KEYS = ['clauseAware', 'functions', 'snippets', 'history', 'didYouMean', 'safety', 'blankLineSplit', 'runAtCursor'] as const;
 export const SMART_LABELS: Record<(typeof SMART_KEYS)[number], [title: string, detail: string]> = {
   clauseAware: ['Clause-aware suggestions', 'Different suggestions after SELECT, WHERE, GROUP BY, ORDER BY'],
   functions: ['SQL functions with hints', 'COUNT, DATE_FORMAT, COALESCE… with how to use them'],
@@ -17,6 +17,8 @@ export const SMART_LABELS: Record<(typeof SMART_KEYS)[number], [title: string, d
   history: ['Learn from my history', 'Rank tables / columns / joins by use; remember my own joins'],
   didYouMean: ['Did-you-mean fixes', 'One-click fix for a misspelled column or table in an error'],
   safety: ['Safety hints', 'UPDATE/DELETE without WHERE, JOIN without ON, SELECT * on big tables'],
+  blankLineSplit: ['Blank line ends a statement', 'No ";" needed between queries separated by an empty line (MySQL). Format adds the ";"'],
+  runAtCursor: ['Ctrl+Enter runs the statement under the cursor', 'Ctrl+Shift+Enter runs the whole script. Off: Ctrl+Enter runs the whole script'],
 };
 export const DEFAULT_PORTS = { mysql: 3306, mssql: 1433 } as const;
 

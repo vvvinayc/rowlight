@@ -378,11 +378,144 @@ export function statementRanges(text: string): [number, number][] {
   return out.filter(([a, b]) => masked.slice(a, b).trim());
 }
 
+// ---------------------------------------------------------------- statements without ";"
+
+/** One statement of a script. `noSemicolon`: it ends at a blank line (the next line starts a new statement). */
+export interface StatementRange {
+  start: number;
+  /** Exclusive; trailing spaces trimmed. */
+  end: number;
+  noSemicolon: boolean;
+}
+
+/** Words that start a statement. Ambiguous ones (SET, VALUES, WITH, SELECT after INSERT…) are checked below. */
+const STATEMENT_START = new Set([
+  'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'WITH', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN', 'CREATE',
+  'ALTER', 'DROP', 'TRUNCATE', 'USE', 'CALL', 'GRANT', 'REVOKE', 'RENAME', 'LOCK', 'UNLOCK', 'START', 'COMMIT',
+  'ROLLBACK', 'ANALYZE', 'OPTIMIZE', 'DECLARE', 'EXEC', 'EXECUTE', 'MERGE', 'PRINT', 'TABLE', 'KILL', 'FLUSH',
+  'SET',
+]);
+/** The previous text ends with one of these, so the next line continues the same statement. */
+const CONTINUES = new Set([
+  'UNION', 'ALL', 'DISTINCT', 'AS', 'AND', 'OR', 'NOT', 'ON', 'WHERE', 'FROM', 'JOIN', 'SELECT', 'BY', 'IN', 'EXISTS',
+  'THEN', 'ELSE', 'WHEN', 'INTO', 'SET', 'VALUES', 'WITH', 'HAVING', 'LIMIT', 'EXCEPT', 'INTERSECT', 'CASE', 'IS',
+  'LIKE', 'BETWEEN', 'RETURN', 'BEGIN',
+]);
+
+/**
+ * Statements of a script: split on ";" (and on GO lines for SQL Server), and, when `blankLines` is on, also at
+ * a blank line when the next line starts a new statement (SELECT, INSERT, UPDATE…) and the text before it is
+ * complete: not inside brackets, strings or comments, not after UNION / AND / a comma…, not an INSERT that
+ * still waits for its SELECT / VALUES, and not an UPDATE that still waits for its SET. Scripts with
+ * BEGIN … END blocks are only split on ";".
+ */
+export function smartStatements(text: string, opts: { blankLines: boolean; dialect: 'mysql' | 'mssql' }): StatementRange[] {
+  const masked = maskSql(text);
+  const out: StatementRange[] = [];
+  const push = (a: number, b: number, noSemicolon: boolean) => {
+    while (a < b && /\s/.test(masked[a])) a++;
+    while (b > a && /\s/.test(masked[b - 1])) b--;
+    if (b > a) out.push({ start: a, end: b, noSemicolon });
+  };
+  // Hard separators: ";" at the top level, and GO lines on SQL Server.
+  const hard: [number, number][] = [];
+  let s = 0;
+  const goRe = /^[ \t]*GO[ \t]*;?[ \t]*$/gim;
+  const gos = opts.dialect === 'mssql' ? [...masked.matchAll(goRe)].map((m) => [m.index!, m.index! + m[0].length]) : [];
+  let g = 0;
+  for (let i = 0; i < masked.length; i++) {
+    if (g < gos.length && i === gos[g][0]) { hard.push([s, i]); i = gos[g][1] - 1; s = gos[g][1]; g++; continue; }
+    if (masked[i] === ';') { hard.push([s, i]); s = i + 1; }
+  }
+  hard.push([s, masked.length]);
+  const blocks = /\bBEGIN\b(?![ \t]*(;|WORK\b|TRAN|TRANSACTION\b|DISTRIBUTED\b))/i.test(masked) || /\bDELIMITER\b/i.test(masked);
+  for (const [a, b] of hard) {
+    if (!opts.blankLines || blocks) { push(a, b, false); continue; }
+    let segStart = a;
+    let depth = 0;
+    for (let i = a; i < b; i++) {
+      const c = masked[i];
+      if (c === '(') depth++;
+      else if (c === ')') depth = Math.max(0, depth - 1);
+      else if (c === '\n' && depth === 0) {
+        // blank line(s) after this newline?
+        const m = /^[ \t\r]*\n[\s]*/.exec(masked.slice(i + 1, b));
+        if (!m) continue;
+        const next = i + 1 + m[0].length;
+        if (next >= b) break;
+        const word = /^[A-Za-z_]+/.exec(masked.slice(next, next + 20))?.[0]?.toUpperCase();
+        if (!word || !STATEMENT_START.has(word)) continue;
+        const before = masked.slice(segStart, i);
+        if (!before.trim()) continue;
+        if (!isComplete(before, word)) continue;
+        push(segStart, i, true);
+        segStart = next;
+        i = next - 1;
+      }
+    }
+    push(segStart, b, false);
+  }
+  return out;
+}
+
+/** True when `before` (masked) is a whole statement, so a statement starting with `nextWord` can follow. */
+function isComplete(before: string, nextWord: string): boolean {
+  const trimmed = before.trimEnd();
+  if (/[,(=<>+\-*/|.!]$/.test(trimmed)) return false;
+  const lastWord = /([A-Za-z_]+)\W*$/.exec(trimmed)?.[1]?.toUpperCase();
+  if (lastWord && CONTINUES.has(lastWord) && /[A-Za-z_]$/.test(trimmed)) return false;
+  // top-level words of the statement so far
+  let top = '';
+  let depth = 0;
+  for (const c of before) { if (c === '(') depth++; if (depth === 0) top += c; else top += ' '; if (c === ')') depth = Math.max(0, depth - 1); }
+  const first = /^\s*([A-Za-z_]+)/.exec(top)?.[1]?.toUpperCase();
+  const has = (w: string) => new RegExp(`\\b${w}\\b`, 'i').test(top);
+  if (first === 'INSERT' || first === 'REPLACE') {
+    if (!has('SELECT') && !has('VALUES') && !has('VALUE') && !has('SET') && !has('TABLE')) return false; // INSERT INTO t (…) ⏎⏎ SELECT …
+  }
+  if (first === 'CREATE' && ['SELECT', 'WITH', 'TABLE'].includes(nextWord) && !has('SELECT')) return false; // CREATE VIEW v AS ⏎⏎ SELECT
+  if (first === 'UPDATE' && nextWord === 'SET' && !has('SET')) return false; // UPDATE t ⏎⏎ SET …
+  if (first === 'WITH' && !has('SELECT') && !has('UPDATE') && !has('DELETE') && !has('INSERT')) return false; // WITH x AS (…) ⏎⏎ SELECT
+  if (first === 'EXPLAIN' && !/^\s*EXPLAIN\s+(FORMAT\s*=\s*\w+\s+)?(ANALYZE\s+)?\w+\s+\S/i.test(top)) return false;
+  return true;
+}
+
+/**
+ * The script to send to the server: a ";" is added after every statement that ends at a blank line, so the
+ * server gets them as separate statements. Line numbers stay the same.
+ */
+export function withSemicolons(text: string, ranges: StatementRange[]): string {
+  let out = '';
+  let last = 0;
+  for (const r of ranges) {
+    if (!r.noSemicolon) continue;
+    out += text.slice(last, r.end) + ';';
+    last = r.end;
+  }
+  return out + text.slice(last);
+}
+
+/** The statement the cursor is in; between statements, the one just above (or the next one at the top). */
+export function statementAt(ranges: StatementRange[], offset: number): StatementRange | undefined {
+  let best: StatementRange | undefined;
+  for (const r of ranges) {
+    if (offset >= r.start && offset <= r.end) return r;
+    if (r.end <= offset) best = r; // ranges are in order: the last one that ends before the cursor
+  }
+  if (best) {
+    // the cursor is on the ";" line or the blank lines right after the statement: use it, unless the next
+    // statement starts on the same line as the cursor
+    return best;
+  }
+  return ranges[0];
+}
+
 /** UPDATE / DELETE without WHERE, JOIN without ON, and SELECT * (size checked by the caller). */
 export function lintSql(text: string, defaultDb: string, type: DbType): SqlHint[] {
   const masked = maskSql(text);
   const hints: SqlHint[] = [];
-  for (const [a, b] of statementRanges(text)) {
+  // blank-line statements count as separate ones here too, so "UPDATE t SET …⏎⏎SELECT … WHERE" still warns
+  for (const { start: a, end: b } of smartStatements(text, { blankLines: true, dialect: type === 'mssql' ? 'mssql' : 'mysql' })) {
     const stmt = masked.slice(a, b);
     const lead = stmt.search(/\S/);
     const first = /^\s*(\w+)/.exec(stmt)?.[1]?.toUpperCase();

@@ -87,6 +87,10 @@ export interface SmartSettings {
   didYouMean: boolean;
   /** Warnings: UPDATE/DELETE without WHERE, JOIN without ON, SELECT * on big tables. */
   safety: boolean;
+  /** A blank line ends a statement when the next line starts a new one (no ";" needed). */
+  blankLineSplit: boolean;
+  /** Ctrl+Enter runs the statement under the cursor; Ctrl+Shift+Enter runs the whole script. */
+  runAtCursor: boolean;
 }
 
 export type UpdateMode = 'auto' | 'notify' | 'off';

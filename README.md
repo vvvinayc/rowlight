@@ -63,7 +63,13 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
   - **Did you mean…?** `Unknown column 'la.custmer_id'` → one click on `customer_id` fixes the query and runs it again.
   - **Safety hints:** warnings for `UPDATE` / `DELETE` without `WHERE` (asked again before running), `JOIN` without
     `ON`, and `SELECT *` without `WHERE` on tables with millions of rows.
-- **Ctrl+Enter** runs the selection, or the whole script; **Cancel** stops a running query (`KILL QUERY` / TDS cancel).
+  - **No `;` needed between queries:** a blank line ends a statement when the next line starts a new one
+    (`SELECT`, `INSERT`, `UPDATE`…). Not inside brackets, strings or comments, not after `UNION` / `AND` / a comma,
+    and not between `INSERT INTO t (…)` and its `SELECT`. A faint underline shows where the `;` is missing
+    (**Ctrl+.** → *Add ;*), and **Format** adds them.
+- **Ctrl+Enter** runs the selection, or the **statement under the cursor** (it flashes so you see what ran);
+  **Ctrl+Shift+Enter** or **▶▶ Script** runs the whole script. Prefer the old way? Switch it off in
+  **Settings → Smart features**. **Cancel** stops a running query (`KILL QUERY` / TDS cancel).
 - **Format SQL** (Ctrl+Shift+F) for MySQL and T-SQL.
 - Multiple tabs (**Ctrl+E**), **open / save `.sql` files** (Ctrl+O / Ctrl+S), and tabs **restored** after a restart.
 - **Query history** per connection, with search, Copy and Insert.
@@ -183,7 +189,9 @@ Press **F1** (or the **⌨ Shortcuts** button) in the app for the full, searchab
 
 | Keys | Action |
 |---|---|
-| Ctrl+Enter | Run selection (or whole script) |
+| Ctrl+Enter | Run selection, or the statement under the cursor |
+| Ctrl+Shift+Enter | Run the whole script |
+| Ctrl+B | Hide / show the connections panel |
 | Ctrl+E / Ctrl+W | New tab / close tab |
 | Ctrl+O / Ctrl+S / Ctrl+Shift+S | Open / save / save as `.sql` |
 | Ctrl+Shift+F | Format SQL |

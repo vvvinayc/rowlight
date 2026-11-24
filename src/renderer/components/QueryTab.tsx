@@ -5,7 +5,7 @@ import type { ConnectionConfig, QueryRunResult, ResultSet, SessionInfo } from '.
 import { api, ApiError, errorText, unwrap } from '../api';
 import { metaCache, subscribe as subscribeMeta } from '../metaCache';
 import { formatEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
-import { closestNames, parseMissingName, replaceName, type MissingName } from '../../shared/sqlSmart';
+import { closestNames, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
 import { parseTableRefs, baseName } from '../../shared/sqlAssist';
 import { smart } from '../smart';
 import { editorTheme } from '../theme';
@@ -62,6 +62,16 @@ interface Props {
   shared: boolean;
 }
 
+type RunMode = 'cursor' | 'script';
+
+/** Briefly highlights what Ctrl+Enter is about to run, so it is clear which statement ran. */
+function flashRange(editor: monaco.editor.IStandaloneCodeEditor, model: monaco.editor.ITextModel, start: number, end: number) {
+  const a = model.getPositionAt(start);
+  const b = model.getPositionAt(end);
+  const deco = editor.createDecorationsCollection([{ range: new monaco.Range(a.lineNumber, a.column, b.lineNumber, b.column), options: { className: 'run-flash', isWholeLine: false } }]);
+  setTimeout(() => deco.clear(), 700);
+}
+
 export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onToggleReadOnly, onRegister, onStatus, onHistoryChanged, onShare, shared, onTextChange }: Props) {
   const textChangeRef = useRef(onTextChange);
   textChangeRef.current = onTextChange;
@@ -92,7 +102,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   const [layout, setLayout] = useState<ResultLayout>(() => {
     try { return localStorage.getItem(LAYOUT_KEY) === 'stacked' ? 'stacked' : 'tabs'; } catch { return 'tabs'; }
   });
-  const runRef = useRef<() => void>(() => {});
+  const runRef = useRef<(rerunSql?: string, mode?: RunMode) => void>(() => {});
   const doFormatRef = useRef<() => void>(() => {});
   const newTabRef = useRef(onNewTab);
   newTabRef.current = onNewTab;
@@ -194,7 +204,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
       timer = setTimeout(() => textChangeRef.current(tab.id, model.getValue()), 300);
     });
     editor.onDidDispose(() => { clearTimeout(timer); clearTimeout(hintTimer); unsubMeta(); sub.dispose(); });
-    if (tab.autoRun) setTimeout(() => runRef.current(), 0);
+    if (tab.autoRun) setTimeout(() => runRef.current(undefined, 'script'), 0);
     return () => {
       onRegister(tab.id, null);
       editor.dispose();
@@ -210,16 +220,17 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   // Ctrl+R: hide / show the results panel (capture phase, so it also works while the editor has focus).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!activeRef.current || !e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (!activeRef.current || !e.ctrlKey || e.altKey) return;
       // Ctrl+Enter: run the visible tab, wherever the focus is (editor, results grid, DB list...), but not
-      // behind an open dialog or while a grid cell is being edited.
+      // behind an open dialog or while a grid cell is being edited. Ctrl+Shift+Enter: the whole script.
       if (e.key === 'Enter') {
         const t = e.target as HTMLElement | null;
         if (document.querySelector('.modal-backdrop') || t?.closest?.('.grid-cell.editing')) return;
         e.preventDefault(); e.stopPropagation();
-        runRef.current();
+        runRef.current(undefined, e.shiftKey ? 'script' : 'cursor');
         return;
       }
+      if (e.shiftKey) return;
       if (e.key.toLowerCase() !== 'r') return;
       e.preventDefault(); e.stopPropagation();
       toggleResultsRef.current();
@@ -233,15 +244,31 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  async function run(rerunSql?: string) {
+  /**
+   * Runs, in order of preference: `rerunSql`; the selection; with mode "cursor" (Ctrl+Enter) and the setting on,
+   * the statement under the cursor; otherwise the whole script. Statements that end at a blank line get their
+   * missing ";" (MySQL) so they run as separate statements.
+   */
+  async function run(rerunSql?: string, mode: RunMode = 'cursor') {
     const editor = editorRef.current;
     if (!editor || running) return;
     if (!connected) { setError('Not connected. Connect the connection in the sidebar first.'); return; }
     if (!rerunSql && pendingCount && !window.confirm(`Discard ${pendingCount} unsaved change(s) and run the query?`)) return;
     const model = editor.getModel()!;
     const sel = editor.getSelection();
-    const sql = rerunSql ?? (sel && !sel.isEmpty() ? model.getValueInRange(sel) : model.getValue());
+    const split = (text: string) => smartStatements(text, { blankLines: smart().blankLineSplit, dialect: conn.type });
+    let sql: string;
+    if (rerunSql !== undefined) sql = rerunSql;
+    else if (sel && !sel.isEmpty()) sql = model.getValueInRange(sel);
+    else if (mode === 'cursor' && smart().runAtCursor) {
+      const text = model.getValue();
+      const r = statementAt(split(text), model.getOffsetAt(editor.getPosition() ?? { lineNumber: 1, column: 1 }));
+      if (!r) return;
+      sql = text.slice(r.start, r.end);
+      flashRange(editor, model, r.start, r.end);
+    } else sql = model.getValue();
     if (!sql.trim()) return;
+    if (conn.type === 'mysql' && smart().blankLineSplit) sql = withSemicolons(sql, split(sql));
     if (!readOnly && smart().safety) {
       const risky = statementsWithoutWhere(sql, conn.type);
       if (risky.length && !window.confirm(risky[0] + '\n\nRun it anyway?')) return;
@@ -329,7 +356,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     setFix(null);
     setError(null);
     onStatus(`Replaced ${fix.missing.name} with ${name}`);
-    setTimeout(() => runRef.current(), 0);
+    const fixed = at >= 0 ? replaceName(fix.sql, fix.missing, name) : undefined;
+    setTimeout(() => runRef.current(fixed, 'script'), 0);
   }
 
   const previewSql = (cs: import('../../shared/types').ChangeSet) => unwrap(api.edit.preview(conn.id, cs));
@@ -374,7 +402,11 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     <div className="query-tab" style={{ display: active ? 'flex' : 'none' }}>
       <div className={'toolbar' + (connectionColor(conn.color) ? ' colored' : '')}
         style={{ ['--conn-color' as string]: connectionColor(conn.color) } as React.CSSProperties}>
-        <button className="primary" onClick={() => run()} disabled={running || !connected} title="Run selection, or whole script if nothing is selected (Ctrl+Enter)">▶ Run</button>
+        <button className="primary" onClick={() => run()} disabled={running || !connected}
+          title={smart().runAtCursor ? 'Run the selection, or the statement under the cursor (Ctrl+Enter)' : 'Run the selection, or the whole script (Ctrl+Enter)'}>▶ Run</button>
+        {smart().runAtCursor && (
+          <button onClick={() => run(undefined, 'script')} disabled={running || !connected} title="Run the whole script (Ctrl+Shift+Enter)">▶▶ Script</button>
+        )}
         <button onClick={cancel} disabled={!running} title="Cancel the running query">■ Cancel</button>
         <button onClick={() => doFormatRef.current()} title="Format the selection, or the whole script (Ctrl+Shift+F)">Format</button>
         <label className="db-select">DB

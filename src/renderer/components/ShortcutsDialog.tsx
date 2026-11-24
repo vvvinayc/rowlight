@@ -11,14 +11,17 @@ const GROUPS: { title: string; items: [keys: string, what: string][] }[] = [
       ['Ctrl+O', 'Open a .sql file'],
       ['Ctrl+S', 'Save the tab to a .sql file'],
       ['Ctrl+Shift+S', 'Save as…'],
+      ['Ctrl+B', 'Hide / show the connections panel (also the ☰ button)'],
     ],
   },
   {
     title: 'Running queries',
     items: [
-      ['Ctrl+Enter', 'Run the selection, or the whole script if nothing is selected'],
+      ['Ctrl+Enter', 'Run the selection, or the statement under the cursor (Settings → Smart features: or the whole script)'],
+      ['Ctrl+Shift+Enter', 'Run the whole script'],
       ['Ctrl+R', 'Hide / show the results panel'],
-      ['Ctrl+Shift+F', 'Format the selection, or the whole script'],
+      ['Ctrl+Shift+F', 'Format the selection, or the whole script (adds missing ";")'],
+      ['Ctrl+.', 'Quick fix on the underlined word, e.g. "Add ;"'],
     ],
   },
   {

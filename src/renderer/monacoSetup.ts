@@ -16,7 +16,7 @@ import { format as formatSqlText } from 'sql-formatter';
 import { metaCache } from './metaCache';
 import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType, TableInfo } from '../shared/types';
-import { clauseAt, functionsFor, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, snippetsFor, type Clause } from '../shared/sqlSmart';
+import { clauseAt, functionsFor, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
 import { rankKey, smart, usageFor } from './smart';
 
 (self as any).MonacoEnvironment = {
@@ -300,9 +300,10 @@ const BIG_TABLE_ROWS = 1_000_000;
 
 export function updateHints(model: monaco.editor.ITextModel) {
   const ctx = contexts.get(model.uri.toString());
-  if (!ctx || !smart().safety) { monaco.editor.setModelMarkers(model, 'rowlight-hints', []); return; }
-  const db = ctx.getDatabase();
   const markers: monaco.editor.IMarkerData[] = [];
+  if (ctx) markers.push(...missingSemicolonMarkers(model, ctx.type));
+  if (!ctx || !smart().safety) { monaco.editor.setModelMarkers(model, 'rowlight-hints', markers); return; }
+  const db = ctx.getDatabase();
   for (const h of lintSql(model.getValue(), db, ctx.type)) {
     let message = h.message;
     let severity = monaco.MarkerSeverity.Warning;
@@ -321,6 +322,45 @@ export function updateHints(model: monaco.editor.ITextModel) {
   monaco.editor.setModelMarkers(model, 'rowlight-hints', markers);
 }
 
+// ---------- statements without ";" (MySQL): a hint on the last word, with an "Add ;" quick fix ----------
+const MISSING_SEMI = 'missingSemicolon';
+
+function missingSemicolonMarkers(model: monaco.editor.ITextModel, type: DbType): monaco.editor.IMarkerData[] {
+  if (type !== 'mysql') return []; // SQL Server does not need ";" between statements
+  const text = model.getValue();
+  const on = smart().blankLineSplit;
+  return smartStatements(text, { blankLines: true, dialect: 'mysql' }).filter((r) => r.noSemicolon).map((r) => {
+    const word = /\S+$/.exec(text.slice(r.start, r.end))![0];
+    const a = model.getPositionAt(r.end - word.length);
+    const b = model.getPositionAt(r.end);
+    return {
+      severity: on ? monaco.MarkerSeverity.Hint : monaco.MarkerSeverity.Warning,
+      message: on
+        ? 'No ";" here. The blank line ends the statement, so it runs on its own. Ctrl+. adds the ";".'
+        : 'No ";" before the next statement: both are sent as one statement and fail. Ctrl+. adds the ";".',
+      code: MISSING_SEMI, source: 'Rowlight',
+      startLineNumber: a.lineNumber, startColumn: a.column, endLineNumber: b.lineNumber, endColumn: b.column,
+    };
+  });
+}
+
+for (const lang of ['mysql', 'sql']) {
+  monaco.languages.registerCodeActionProvider(lang, {
+    provideCodeActions(model, _range, context) {
+      const hits = context.markers.filter((m) => m.code === MISSING_SEMI);
+      if (!hits.length) return { actions: [], dispose() {} };
+      const all = monaco.editor.getModelMarkers({ resource: model.uri, owner: 'rowlight-hints' }).filter((m) => m.code === MISSING_SEMI);
+      const edit = (ms: monaco.editor.IMarkerData[]) => ({
+        edits: ms.map((m) => ({ resource: model.uri, versionId: model.getVersionId(),
+          textEdit: { range: new monaco.Range(m.endLineNumber, m.endColumn, m.endLineNumber, m.endColumn), text: ';' } })),
+      });
+      const actions: monaco.languages.CodeAction[] = [{ title: 'Add ;', kind: 'quickfix', diagnostics: hits, edit: edit(hits), isPreferred: true }];
+      if (all.length > 1) actions.push({ title: `Add all missing ; (${all.length})`, kind: 'quickfix', diagnostics: all, edit: edit(all) });
+      return { actions, dispose() {} };
+    },
+  });
+}
+
 /** UPDATE / DELETE statements in the SQL that have no WHERE (asked about before running). */
 export function statementsWithoutWhere(sql: string, type: DbType): string[] {
   return lintSql(sql, '', type).filter((h) => h.kind === 'noWhere').map((h) => h.message);
@@ -328,6 +368,8 @@ export function statementsWithoutWhere(sql: string, type: DbType): string[] {
 
 // ---------- SQL formatter (Ctrl+Shift+F, or "Format" button / right-click → Format Document) ----------
 function formatSql(text: string, languageId: string): string {
+  // MySQL: add the missing ";" first, otherwise statements separated only by a blank line are merged into one.
+  if (languageId === 'mysql' && smart().blankLineSplit) text = withSemicolons(text, smartStatements(text, { blankLines: true, dialect: 'mysql' }));
   return formatSqlText(text, {
     language: languageId === 'mysql' ? 'mysql' : 'transactsql',
     keywordCase: 'upper',

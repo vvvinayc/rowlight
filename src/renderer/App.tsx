@@ -60,6 +60,9 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  // Connections panel on the left: hide / show with the ☰ button or Ctrl+B (remembered).
+  const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem('rowlight.sidebarOpen') !== '0'; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem('rowlight.sidebarOpen', sidebarOpen ? '1' : '0'); } catch { /* ignore */ } }, [sidebarOpen]);
   const [historyVersion, setHistoryVersion] = useState(0);
   useEffect(() => { invalidateUsage(); }, [historyVersion]); // re-learn tables / columns / joins from the new history
   const [status, setStatus] = useState('Ready');
@@ -231,6 +234,7 @@ export function App() {
       }
       if (!e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      if (k === 'b' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); setSidebarOpen((v) => !v); }
       if (k === 'e' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); shortcuts.current.newTab(); }
       if (k === 'w' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); shortcuts.current.closeTab(); }
       if (k === 'o' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); shortcuts.current.open(); }
@@ -339,6 +343,8 @@ export function App() {
   return (
     <div className="app">
       <div className="topbar">
+        <button className={'sidebar-toggle' + (sidebarOpen ? ' active' : '')} onClick={() => setSidebarOpen((v) => !v)}
+          title={(sidebarOpen ? 'Hide' : 'Show') + ' the connections panel (Ctrl+B)'}>☰</button>
         <span className="brand">Rowlight</span>
         <button onClick={() => openTab(currentConnId ?? null)} title="New query tab (Ctrl+E)">+ Query tab</button>
         <button onClick={openFile} title="Open a .sql file (Ctrl+O)">Open…</button>
@@ -358,6 +364,7 @@ export function App() {
       </div>
       <UpdateBar />
       <div className="main">
+        <div className="sidebar-wrap" style={{ display: sidebarOpen ? 'contents' : 'none' }}>
         <Sidebar
           connections={connections}
           sessions={sessions}
@@ -384,6 +391,7 @@ export function App() {
           onTableDetails={(connId, db, table) => setDetails({ connId, db, table })}
           onInsert={insertIntoEditor}
         />
+        </div>
         <div className="workspace">
           <div className="tabbar">
             {tabs.map((t) => {
