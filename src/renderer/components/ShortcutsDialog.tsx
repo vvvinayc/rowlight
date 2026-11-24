@@ -38,7 +38,9 @@ const GROUPS: { title: string; items: [keys: string, what: string][] }[] = [
       ['Shift+Alt+Down', 'Duplicate the line'],
       ['Ctrl+Shift+K', 'Delete the line'],
       ['Ctrl+/', 'Comment / uncomment the line (in the editor)'],
-      ['Alt+Click', 'Add another cursor'],
+      ['Alt+drag', 'Box (column) selection, like SSMS: type once and every line gets it'],
+      ['Ctrl+Shift+Alt+Arrows', 'Box selection with the keyboard'],
+      ['Ctrl+Click', 'Add another cursor'],
     ],
   },
   {

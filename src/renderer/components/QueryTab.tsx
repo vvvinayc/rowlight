@@ -176,6 +176,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
       renderLineHighlight: 'line',
       suggest: { showWords: false },
       quickSuggestions: { other: true, comments: false, strings: false },
+      // Like SSMS: Alt+drag selects a box (type once, every line gets it); Ctrl+Click adds another cursor.
+      multiCursorModifier: 'ctrlCmd',
     });
     editorRef.current = editor;
     (hostRef.current as any).__editor = editor; // handy for debugging from DevTools

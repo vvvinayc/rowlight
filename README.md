@@ -198,6 +198,8 @@ Press **F1** (or the **⌨ Shortcuts** button) in the app for the full, searchab
 | Ctrl+R | Hide / show the results panel (running a query shows it again) |
 | F1 | All keyboard shortcuts |
 | Ctrl+Space | Autocomplete |
+| Alt+drag | Box (column) selection like SSMS: type once, every line gets it (keyboard: Ctrl+Shift+Alt+Arrows) |
+| Ctrl+Click | Add another cursor |
 | Ctrl + = / Ctrl + − / Ctrl + 0 | Zoom in / out / reset (also Ctrl + mouse wheel) |
 | Home / End, Ctrl+Home / Ctrl+End | First / last column, first / last cell (results grid) |
 | F2 / Enter, Delete | Edit cell, set NULL (in an editable grid) |
