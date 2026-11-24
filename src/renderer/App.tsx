@@ -421,6 +421,7 @@ export function App() {
                   conn={conn}
                   session={sessions[t.connId]}
                   onNewTab={() => shortcuts.current.newTab()}
+                  onOpenSql={(sql) => openTab(t.connId, sql)}
                   onToggleReadOnly={() => toggleReadOnly(t.connId)}
                   onRegister={(id, h) => (h ? editors.current.set(id, h) : editors.current.delete(id))}
                   onTextChange={onTextChange}

@@ -348,3 +348,9 @@ kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--border); bo
 .smart-box label.check { display: flex; flex-direction: row; align-items: flex-start; gap: 6px; margin: 3px 0; }
 .smart-box label.check input { margin-top: 2px; }
 .smart-all { display: flex; justify-content: flex-end; margin-top: 4px; }
+
+/* error boundary, generated SQL */
+.error-boundary { padding: 12px 16px; color: var(--err-text); background: var(--err-bg); border: 1px solid var(--err-border); margin: 8px; border-radius: 6px; overflow: auto; flex: 1; }
+.error-boundary pre { white-space: pre-wrap; font: 12px Consolas, monospace; }
+.value-viewer.sql-gen { font: 12px Consolas, monospace; white-space: pre; }
+.grid-toolbar select.gen-sql { margin-left: 4px; }

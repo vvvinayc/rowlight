@@ -78,6 +78,7 @@ interface Api {
   history: { get(id: string): P<HistoryEntry[]>; clear(id: string): P<void> };
   settings: { get(): P<Settings>; save(s: Settings): P<Settings> };
   copyText(text: string): P<void>;
+  logError?(text: string): P<void>;
   zoom(what: 'in' | 'out' | 'reset'): P<void>;
   appVersion(): P<string>;
   update: {

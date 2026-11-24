@@ -193,6 +193,14 @@ function registerIpc() {
   handle('query:closeTab', async (id: string, tabId: string) => { await sessions.get(id)?.driver.closeTab(tabId); });
   handle('query:useDatabase', (id: string, tabId: string, db: string) => session(id).driver.useDatabase(tabId, db));
 
+  // Renderer errors (error boundary / window.onerror) go to userData/logs/renderer.log for bug reports.
+  handle('log:error', (text: string) => {
+    const dir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'renderer.log');
+    try { if (fs.statSync(file).size > 1_000_000) fs.renameSync(file, file + '.old'); } catch { /* new file */ }
+    fs.appendFileSync(file, `${new Date().toISOString()} v${app.getVersion()} ${String(text).slice(0, 20000)}\n\n`);
+  });
   handle('edit:preview', (id: string, changes: ChangeSet) => session(id).previewChanges(changes));
   handle('edit:save', (id: string, tabId: string, changes: ChangeSet) => session(id).saveChanges(tabId, changes));
 

@@ -12,7 +12,13 @@ export interface GridEditApi {
   setCell(r: number, c: number, v: unknown): void;
   toggleDelete(rows: number[]): void;
   addRow(): number;
+  /** Adds copies of the rows as new rows (primary key left empty). Returns how many were added. */
+  duplicateRows(rows: number[]): number;
+  /** INSERT / UPDATE / DELETE statements for the rows (current values), for copying. Nothing is executed. */
+  sqlFor(kind: SqlKind, rows: number[]): ChangeSet;
 }
+
+export type SqlKind = 'insert' | 'update' | 'delete';
 
 export interface PendingItem {
   kind: 'update' | 'insert' | 'delete';
@@ -49,6 +55,8 @@ export function useRowEdits(baseRows: unknown[][], edit: EditInfo | undefined) {
 
   const api: GridEditApi | undefined = useMemo(() => {
     if (!edit) return undefined;
+    const cur = (r: number, c: number) => (r < n ? (edits.get(r)?.has(c) ? edits.get(r)!.get(c) : baseRows[r][c]) : inserted[r - n]?.values[c]);
+    const keys = new Set(edit.keyColumns);
     return {
       isEditableCol: (c) => edit.columnMap[c] != null,
       value: (r, c) => (r < n ? (edits.get(r)?.has(c) ? edits.get(r)!.get(c) : baseRows[r][c]) : inserted[r - n]?.values[c]),
@@ -90,8 +98,37 @@ export function useRowEdits(baseRows: unknown[][], edit: EditInfo | undefined) {
         setInserted((list) => [...list, { values: edit.columnMap.map(() => null), touched: new Set() }]);
         return n + inserted.length;
       },
+      duplicateRows: (rs) => {
+        const copyCols = edit.columnMap.map((col, c) => (col && !keys.has(col) ? c : -1)).filter((c) => c >= 0);
+        const copies = rs.map((r) => ({
+          values: edit.columnMap.map((_, c) => (copyCols.includes(c) ? cur(r, c) ?? null : null)),
+          touched: new Set(copyCols),
+        }));
+        if (copies.length) setInserted((list) => [...list, ...copies]);
+        return copies.length;
+      },
+      sqlFor: (kind, rs) => {
+        const cs: ChangeSet = { edit, updates: [], inserts: [], deletes: [] };
+        const base = rs.filter((r) => r < n); // new rows have no key yet: only INSERT makes sense for them
+        if (kind === 'insert') {
+          for (const r of rs) {
+            const values: RowValues = {};
+            edit.columnMap.forEach((col, c) => { if (col) values[col] = cur(r, c) ?? null; });
+            cs.inserts.push(values);
+          }
+        } else if (kind === 'delete') {
+          for (const r of base) cs.deletes.push({ key: keyOf(r) });
+        } else {
+          for (const r of base) {
+            const set: RowValues = {};
+            edit.columnMap.forEach((col, c) => { if (col && !keys.has(col)) set[col] = cur(r, c) ?? null; });
+            cs.updates.push({ key: keyOf(r), set });
+          }
+        }
+        return cs;
+      },
     };
-  }, [edit, edits, deleted, inserted, baseRows, n]);
+  }, [edit, edits, deleted, inserted, baseRows, n, keyOf]);
 
   /** Human-readable list for the pending-changes panel. */
   const pending: PendingItem[] = useMemo(() => {

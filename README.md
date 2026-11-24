@@ -80,6 +80,9 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 
 ### Inline editing (when read-only is off)
 - Edit cells, set NULL, add and delete rows directly in the grid.
+- **⧉ Duplicate** copies the selected rows as new rows (primary key left empty for auto-increment); edit and Save.
+- **Generate SQL…** writes `INSERT`, `UPDATE` or `DELETE` statements for the selected rows (or all shown rows), with
+  Copy and *Open in new tab*. Nothing is run, so it also works in read-only mode.
 - The **pending changes** panel lists every change with *revert*, *Revert all* and *Show SQL*.
 - **Save** runs everything in **one transaction** with parameterised statements, keyed on the primary key. If a row
   was changed by someone else meanwhile, everything is rolled back.

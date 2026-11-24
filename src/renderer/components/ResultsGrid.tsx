@@ -4,7 +4,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorText, unwrap } from '../api';
-import type { GridEditApi } from './useRowEdits';
+import type { GridEditApi, SqlKind } from './useRowEdits';
+import type { ChangeSet } from '../../shared/types';
 
 const ROW_H = 24;
 const ROWNUM_W = 56;
@@ -29,6 +30,10 @@ interface Props {
   /** Rows fetched per page (the auto-LIMIT), shown on the button. */
   pageSize?: number;
   onLoadMore?(): void;
+  /** Turns a change set into readable SQL (no execution). Present when the result maps to one table. */
+  onPreviewSql?(cs: ChangeSet): Promise<string[]>;
+  /** Opens generated SQL in a new query tab. */
+  onOpenSql?(sql: string): void;
 }
 
 interface Cell { r: number; c: number }
@@ -53,7 +58,7 @@ function initialWidths(columns: string[], rows: unknown[][]): number[] {
   });
 }
 
-export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edit, canEdit, editNote, hasMore, loadingMore, pageSize, onLoadMore }: Props) {
+export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edit, canEdit, editNote, hasMore, loadingMore, pageSize, onLoadMore, onPreviewSql, onOpenSql }: Props) {
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filters, setFilters] = useState<string[]>(() => columns.map(() => ''));
   const [quick, setQuick] = useState('');
@@ -64,6 +69,7 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
   const [height, setHeight] = useState(400);
   const [viewer, setViewer] = useState<{ col: string; value: string } | null>(null);
   const [editing, setEditing] = useState<{ r: number; c: number; text: string } | null>(null);
+  const [generated, setGenerated] = useState<{ title: string; sql: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const editable = !!edit && !!canEdit;
@@ -220,6 +226,31 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
     edit!.toggleDelete(rs);
   }
 
+  function duplicate() {
+    const rs = selectedRows();
+    if (!rs.length) { onStatus?.('Select the row(s) to duplicate first'); return; }
+    const k = edit!.duplicateRows(rs);
+    setSort(null);
+    onStatus?.(`Duplicated ${k} row(s) as new rows (primary key left empty). Edit them, then Save.`);
+    setTimeout(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, 0);
+  }
+
+  /** INSERT / UPDATE / DELETE for the selected rows (or all shown rows), shown for copying. Runs nothing. */
+  async function generateSql(kind: SqlKind) {
+    if (!edit || !onPreviewSql) return;
+    const picked = selectedRows();
+    const rs = picked.length ? picked : view;
+    if (!rs.length) { onStatus?.('No rows'); return; }
+    if (rs.length > 5000 && !window.confirm(`Generate ${kind.toUpperCase()} statements for ${rs.length.toLocaleString()} rows?`)) return;
+    try {
+      const lines = await onPreviewSql(edit.sqlFor(kind, rs));
+      if (!lines.length) { onStatus?.(kind === 'insert' ? 'Nothing to generate' : 'New (unsaved) rows have no key yet: only INSERT works for them'); return; }
+      setGenerated({ title: `${kind.toUpperCase()} for ${lines.length} row(s)${picked.length ? '' : ' (all shown rows)'}`, sql: lines.join('\n') });
+    } catch (e) {
+      onStatus?.('Could not generate SQL: ' + errorText(e));
+    }
+  }
+
   function addRow() {
     edit!.addRow();
     // The new row is added at the end; clear sort so it shows up last.
@@ -296,7 +327,17 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
             <button onClick={addRow} title="Add a new row">+ Row</button>
             <button onClick={deleteRows} title="Mark the selected rows for deletion (click again to undo)">− Delete row</button>
             <button onClick={setNull} title="Set the selected cells to NULL (Delete key)">Set NULL</button>
+            <button onClick={duplicate} title="Copy the selected rows as new rows (primary key left empty), then edit and Save">⧉ Duplicate</button>
           </>
+        )}
+        {edit && onPreviewSql && (
+          <select className="gen-sql" value="" title="Generate INSERT / UPDATE / DELETE statements for the selected rows (all shown rows if none are selected). Nothing is run."
+            onChange={(e) => { const k = e.target.value as SqlKind; if (k) generateSql(k); }}>
+            <option value="">Generate SQL…</option>
+            <option value="insert">INSERT statements</option>
+            <option value="update">UPDATE statements</option>
+            <option value="delete">DELETE statements</option>
+          </select>
         )}
         <span className="spacer" />
         {editNote && <span className={'edit-note small' + (editable ? ' on' : '')} title={editNote}>{editNote}</span>}
@@ -393,6 +434,21 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
           </div>
         </div>
       </div>
+      {generated && (
+        <div className="modal-backdrop" onMouseDown={() => setGenerated(null)}>
+          <div className="modal wide" onMouseDown={(e) => e.stopPropagation()}>
+            <h3>{generated.title}</h3>
+            <textarea className="value-viewer sql-gen" readOnly value={generated.sql} />
+            <div className="modal-actions">
+              <span className="muted small">Nothing was run. Review before using it.</span>
+              <span className="spacer" />
+              <button onClick={async () => { await api.copyText(generated.sql); onStatus?.('SQL copied'); }}>Copy</button>
+              {onOpenSql && <button onClick={() => { onOpenSql(generated.sql); setGenerated(null); }}>Open in new tab</button>}
+              <button className="primary" onClick={() => setGenerated(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {viewer && (
         <div className="modal-backdrop" onMouseDown={() => setViewer(null)}>
           <div className="modal wide" onMouseDown={(e) => e.stopPropagation()}>

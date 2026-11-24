@@ -12,6 +12,7 @@ import { editorTheme } from '../theme';
 import { connectionColor } from '../../shared/defaults';
 import { ResultsGrid } from './ResultsGrid';
 import { useRowEdits } from './useRowEdits';
+import { ErrorBoundary } from './ErrorBoundary';
 
 const NO_ROWS: unknown[][] = [];
 
@@ -49,6 +50,8 @@ interface Props {
   conn: ConnectionConfig;
   session?: SessionInfo;
   onNewTab(): void;
+  /** Opens SQL in a new query tab of the same connection. */
+  onOpenSql(sql: string): void;
   onToggleReadOnly(): void;
   onRegister(tabId: string, h: EditorHandle | null): void;
   onStatus(msg: string): void;
@@ -59,7 +62,7 @@ interface Props {
   shared: boolean;
 }
 
-export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnly, onRegister, onStatus, onHistoryChanged, onShare, shared, onTextChange }: Props) {
+export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onToggleReadOnly, onRegister, onStatus, onHistoryChanged, onShare, shared, onTextChange }: Props) {
   const textChangeRef = useRef(onTextChange);
   textChangeRef.current = onTextChange;
   const hostRef = useRef<HTMLDivElement>(null);
@@ -318,6 +321,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
     setTimeout(() => runRef.current(), 0);
   }
 
+  const previewSql = (cs: import('../../shared/types').ChangeSet) => unwrap(api.edit.preview(conn.id, cs));
+
   async function cancel() {
     await api.query.cancel(conn.id, tab.id);
     onStatus('Cancelling…');
@@ -431,6 +436,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
           </div>
         )}
         <div className="result-body" style={resultsOpen ? undefined : { display: 'none' }}>
+          <ErrorBoundary label="results grid" onReset={() => edits.reset()}>
           {stacked && view !== 'messages' && result && result.results.length > 0 ? (
             <div className="stacked">
               {result.results.map((rs, i) => (
@@ -454,6 +460,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
                     loadingMore={paging[i]?.loading}
                     pageSize={rs.pageLimit}
                     onLoadMore={() => loadMore(i)}
+                    onPreviewSql={previewSql}
+                    onOpenSql={onOpenSql}
                   />
                 </div>
               ))}
@@ -472,6 +480,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
               loadingMore={typeof view === 'number' ? paging[view]?.loading : false}
               pageSize={current.pageLimit}
               onLoadMore={() => typeof view === 'number' && loadMore(view)}
+              onPreviewSql={previewSql}
+              onOpenSql={onOpenSql}
             />
           ) : view === 'messages' && result ? (
             <div className="messages">
@@ -495,6 +505,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onToggleReadOnl
               {readOnly ? ' Read-only mode: INSERT/UPDATE/DELETE/DDL are blocked.' : ''}
             </div>
           )}
+          </ErrorBoundary>
         </div>
         {pendingCount > 0 && (
           <div className="pending">

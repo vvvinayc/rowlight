@@ -70,6 +70,7 @@ const api = {
     save: (s: unknown) => call('settings:save', s),
   },
   copyText: (text: string) => call('clipboard:write', text),
+  logError: (text: string) => call('log:error', text),
   zoom: (what: 'in' | 'out' | 'reset') => call('zoom:set', what),
   appVersion: () => call('app:version'),
   update: {
