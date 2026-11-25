@@ -72,7 +72,11 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 - **Ctrl+Enter** runs the selection, or the **statement under the cursor** (it flashes so you see what ran);
   **Ctrl+Shift+Enter** or **▶▶ Script** runs the whole script. Prefer the old way? Switch it off in
   **Settings → Smart features**. **Cancel** stops a running query (`KILL QUERY` / TDS cancel).
-- **Format SQL** (Ctrl+Shift+F) for MySQL and T-SQL.
+- **Format SQL** (Ctrl+Shift+F) for MySQL and T-SQL. Pasted **JSON** is formatted as JSON (values kept exactly as written,
+  `655.00` stays `655.00`); right-click → *JSON: one line* puts it back on one line.
+- **JSON cells:** double-click a cell holding JSON and it opens formatted (*As stored* shows the raw text).
+- **Several connections side by side:** click a connection on the left (or its **SQL** button) to go to its tab, or open
+  one. Ctrl+E then opens more tabs for that connection.
 - Multiple tabs (**Ctrl+E**), **open / save `.sql` files** (Ctrl+O / Ctrl+S), and tabs **restored** after a restart.
 - **Query history** per connection, with search, Copy and Insert.
 

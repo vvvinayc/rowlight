@@ -6,7 +6,8 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
   {
     title: 'Tabs, files and window',
     items: [
-      ['Ctrl+E', 'New query tab'],
+      ['Ctrl+E', 'New query tab for the connection of the current tab'],
+      ['Click a connection on the left', 'Go to its tab (opens one if it has none)', "To work on two connections side by side (e.g. LP Production and DR): click DR on the left, or its SQL button, and you get a DR tab next to the LP one. Ctrl+E then opens more DR tabs. Give each connection a colour (✎ Edit → Colour) to tell the tabs apart."],
       ['Ctrl+W', 'Close the current tab'],
       ['Middle-click a tab', 'Close that tab'],
       ['Ctrl+O', 'Open a .sql file'],
@@ -22,7 +23,7 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
     items: [
       ['Ctrl+Enter', 'Run the selection, or the statement under the cursor (it flashes). Setting off: the whole script', "Put the cursor anywhere inside a query: only that query runs. Queries are separated by ; or by an empty line. Select text to run just that."],
       ['Ctrl+Shift+Enter', 'Run the whole script (also the ▶▶ Script button)', "Every query in the tab runs, one after the other; each result gets its own tab."],
-      ['Ctrl+Shift+F', 'Format the selection, or the whole script (adds missing ";")'],
+      ['Ctrl+Shift+F', 'Format the selection, or the whole script (adds missing ";"). Pasted JSON is formatted as JSON', "Paste a JSON value into a tab and press Ctrl+Shift+F (or the Format button): one value per line, numbers kept exactly (655.00 stays 655.00). Right-click → JSON: one line puts it back on one line."],
       ['Ctrl+.', 'Quick fix on the underlined word, e.g. "Add ;"', "Click on the underlined word, press Ctrl+. and pick the fix from the menu."],
       ['F8 / Shift+F8', 'Go to the next / previous warning'],
     ],
@@ -98,7 +99,7 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
       ['Enter', 'While editing: save and move down'],
       ['Tab / Shift+Tab', 'While editing: save and move right / left'],
       ['Esc', 'While editing: cancel'],
-      ['Double-click a cell', 'Open the full value (editable results: edit it)'],
+      ['Double-click a cell', 'Open the full value (editable results: edit it). JSON values open formatted', "JSON is shown one value per line; \"As stored\" shows the raw text. Copy copies what you see."],
       ['Click a column name', 'Sort (click again: reverse, third click: off)'],
     ],
   },

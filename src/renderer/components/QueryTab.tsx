@@ -4,7 +4,7 @@ import React, { useEffect, useReducer, useRef, useState } from 'react';
 import type { ConnectionConfig, QueryRunResult, ResultSet, SessionInfo } from '../../shared/types';
 import { api, ApiError, errorText, unwrap } from '../api';
 import { metaCache, subscribe as subscribeMeta } from '../metaCache';
-import { formatEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
+import { formatEditor, minifyJsonInEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
 import { closestNames, fixBareStars, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
 import { parseTableRefs, baseName } from '../../shared/sqlAssist';
 import { smart } from '../smart';
@@ -185,6 +185,9 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     // several tabs open the most recently created editor received them and the visible tab did not run.
     // addAction is scoped to this editor instance.
     editor.addAction({ id: 'rowlight.format', label: 'Format SQL', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF], run: () => doFormatRef.current() });
+    editor.addAction({ id: 'rowlight.jsonPretty', label: 'JSON: format (indent)', contextMenuGroupId: '1_modification', contextMenuOrder: 2, run: () => doFormatRef.current() });
+    editor.addAction({ id: 'rowlight.jsonMinify', label: 'JSON: one line', contextMenuGroupId: '1_modification', contextMenuOrder: 3,
+      run: () => { const err = minifyJsonInEditor(editor); if (err) setError(err); } });
     onRegister(tab.id, {
       insert(text) {
         const sel = editor.getSelection();

@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorText, unwrap } from '../api';
 import type { GridEditApi, SqlKind } from './useRowEdits';
 import type { ChangeSet } from '../../shared/types';
+import { jsonError, looksLikeJson, prettyJson } from '../../shared/jsonFormat';
 
 const ROW_H = 24;
 const ROWNUM_W = 56;
@@ -449,18 +450,36 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
           </div>
         </div>
       )}
-      {viewer && (
-        <div className="modal-backdrop" onMouseDown={() => setViewer(null)}>
-          <div className="modal wide" onMouseDown={(e) => e.stopPropagation()}>
-            <h3>{viewer.col}</h3>
-            <textarea className="value-viewer" readOnly value={viewer.value} />
-            <div className="modal-actions">
-              <button onClick={() => api.copyText(viewer.value)}>Copy</button>
-              <button className="primary" onClick={() => setViewer(null)}>Close</button>
-            </div>
-          </div>
+      {viewer && <ValueViewer col={viewer.col} value={viewer.value} onClose={() => setViewer(null)} onStatus={onStatus} />}
+    </div>
+  );
+}
+
+/** Full cell value. JSON is shown formatted (values kept exactly as stored), with a switch back to the raw text. */
+function ValueViewer({ col, value, onClose, onStatus }: { col: string; value: string; onClose(): void; onStatus?: (m: string) => void }) {
+  const isJson = useMemo(() => looksLikeJson(value), [value]);
+  const [pretty, setPretty] = useState(true);
+  const err = useMemo(() => (isJson ? jsonError(value.trim()) : null), [isJson, value]);
+  const shown = isJson && pretty ? prettyJson(value) : value;
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="modal wide" onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
+        <h3>{col}{isJson && <span className="muted small"> · JSON</span>}</h3>
+        <textarea className="value-viewer" readOnly value={shown} autoFocus wrap={isJson && pretty ? 'off' : 'soft'} />
+        {err && <div className="muted small json-error">⚠ Not valid JSON: {err}</div>}
+        <div className="modal-actions">
+          {isJson && (
+            <span className="seg">
+              <button className={pretty ? 'active' : ''} onClick={() => setPretty(true)} title="Indented, one value per line">Formatted</button>
+              <button className={!pretty ? 'active' : ''} onClick={() => setPretty(false)} title="Exactly as stored in the database">As stored</button>
+            </span>
+          )}
+          <span className="spacer" />
+          <button onClick={async () => { await api.copyText(shown); onStatus?.(isJson && pretty ? 'Formatted JSON copied' : 'Value copied'); }}>Copy</button>
+          <button className="primary" onClick={onClose}>Close</button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

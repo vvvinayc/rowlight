@@ -106,7 +106,7 @@ export function Sidebar(p: Props) {
                 <span className="node-actions" onClick={(e) => e.stopPropagation()}>
                   {s ? (
                     <>
-                      <button title="New query tab (Ctrl+E)" onClick={() => p.onNewTab(c.id)}>SQL</button>
+                      <button title={`New query tab for ${c.name}`} onClick={() => p.onNewTab(c.id)}>SQL</button>
                       <button title="Refresh metadata" onClick={() => refresh(c.id)}>⟳</button>
                       <button title="Disconnect" onClick={() => p.onDisconnect(c.id)}>⏏</button>
                     </>

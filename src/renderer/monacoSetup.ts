@@ -13,6 +13,7 @@ import 'monaco-editor/editor/common/standaloneStrings.js';
 import 'monaco-editor/languages/definitions/mysql/register.js';
 import 'monaco-editor/languages/definitions/sql/register.js';
 import { format as formatSqlText } from 'sql-formatter';
+import { jsonError, looksLikeJson, minifyJson, prettyJson } from '../shared/jsonFormat';
 import { metaCache } from './metaCache';
 import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType, TableInfo } from '../shared/types';
@@ -400,6 +401,8 @@ export function statementsWithoutWhere(sql: string, type: DbType): string[] {
 
 // ---------- SQL formatter (Ctrl+Shift+F, or "Format" button / right-click → Format Document) ----------
 function formatSql(text: string, languageId: string): string {
+  // Pasted JSON (e.g. a column value) is laid out as JSON, keeping every value exactly as written.
+  if (looksLikeJson(text)) return prettyJson(text);
   // MySQL: add the missing ";" first, otherwise statements separated only by a blank line are merged into one.
   if (languageId === 'mysql' && smart().blankLineSplit) text = withSemicolons(text, smartStatements(text, { blankLines: true, dialect: 'mysql' }));
   return formatSqlText(text, {
@@ -430,14 +433,33 @@ export function formatEditor(editor: monaco.editor.IStandaloneCodeEditor): strin
   const sel = editor.getSelection();
   const range = sel && !sel.isEmpty() ? sel : model.getFullModelRange();
   try {
-    const text = formatSql(model.getValueInRange(range), model.getLanguageId());
+    const original = model.getValueInRange(range);
+    const text = formatSql(original, model.getLanguageId());
     editor.pushUndoStop();
     editor.executeEdits('format', [{ range, text, forceMoveMarkers: true }]);
     editor.pushUndoStop();
+    if (looksLikeJson(original)) {
+      const err = jsonError(original.trim());
+      return err ? 'Formatted as JSON, but the JSON is not valid: ' + err : null;
+    }
     return null;
   } catch (e) {
     return 'Could not format: ' + String((e as Error).message ?? e).split('\n')[0];
   }
+}
+
+/** Right-click → "JSON: one line": the selection (or everything) as compact JSON. */
+export function minifyJsonInEditor(editor: monaco.editor.IStandaloneCodeEditor): string | null {
+  const model = editor.getModel();
+  if (!model) return null;
+  const sel = editor.getSelection();
+  const range = sel && !sel.isEmpty() ? sel : model.getFullModelRange();
+  const original = model.getValueInRange(range);
+  if (!looksLikeJson(original)) return 'This is not JSON (it should start with { or [).';
+  editor.pushUndoStop();
+  editor.executeEdits('minify', [{ range, text: minifyJson(original), forceMoveMarkers: true }]);
+  editor.pushUndoStop();
+  return null;
 }
 
 export { monaco };

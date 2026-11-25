@@ -327,6 +327,19 @@ export function App() {
     });
   }
 
+  // Clicking a connection in the sidebar goes to its tab (the one used last), so Ctrl+E / + Query tab then open a
+  // tab for that connection. A connected connection without a tab gets one.
+  const lastTabOf = useRef<Record<string, string>>({});
+  if (activeTab) lastTabOf.current[activeTab.connId] = activeTab.id;
+  function selectConnection(id: string) {
+    setActiveConnId(id);
+    if (activeTab?.connId === id) return;
+    const own = tabs.filter((t) => t.connId === id);
+    const tab = own.find((t) => t.id === lastTabOf.current[id]) ?? own[own.length - 1];
+    if (tab) setActiveTabId(tab.id);
+    else if (sessions[id]) openTab(id);
+  }
+
   function openTable(connId: string, db: string, table: string) {
     const conn = connById(connId);
     if (!conn) return;
@@ -346,7 +359,7 @@ export function App() {
         <button className={'sidebar-toggle' + (sidebarOpen ? ' active' : '')} onClick={() => setSidebarOpen((v) => !v)}
           title={(sidebarOpen ? 'Hide' : 'Show') + ' the connections panel (Ctrl+B)'}>☰</button>
         <span className="brand">Rowlight</span>
-        <button onClick={() => openTab(currentConnId ?? null)} title="New query tab (Ctrl+E)">+ Query tab</button>
+        <button onClick={() => openTab(currentConnId ?? null)} title={`New query tab for ${connById(currentConnId ?? null)?.name ?? "the selected connection"} (Ctrl+E). For another connection: click it on the left, or its SQL button`}>+ Query tab</button>
         <button onClick={openFile} title="Open a .sql file (Ctrl+O)">Open…</button>
         <button onClick={() => saveFile(false)} disabled={!activeTabId} title="Save to a .sql file (Ctrl+S, Ctrl+Shift+S = Save as)">Save</button>
         <button className={showHistory ? 'active' : ''} onClick={() => setShowHistory((v) => !v)}>History</button>
@@ -371,7 +384,7 @@ export function App() {
           connecting={connecting}
           shared={shares}
           activeConnId={currentConnId ?? null}
-          onSelect={setActiveConnId}
+          onSelect={selectConnection}
           onConnect={(id) => connect(id)}
           onDisconnect={disconnect}
           onNew={() => setEditing('new')}
