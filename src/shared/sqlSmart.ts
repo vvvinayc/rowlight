@@ -378,6 +378,88 @@ export function statementRanges(text: string): [number, number][] {
   return out.filter(([a, b]) => masked.slice(a, b).trim());
 }
 
+// ---------------------------------------------------------------- "a, b, *" → "a, b, t.*" (MySQL)
+
+/** A bare "*" that MySQL rejects, and what to write instead. */
+export interface StarFix {
+  start: number;
+  end: number;
+  /** "lads.*", or "a.*, b.*" when the FROM has several tables (that is what "*" means). */
+  replacement: string;
+}
+
+const FROM_END = /^(WHERE|GROUP|HAVING|ORDER|LIMIT|UNION|EXCEPT|INTERSECT|WINDOW|FOR|INTO|LOCK)$/i;
+const NOT_ALIAS = /^(ON|USING|WHERE|JOIN|INNER|LEFT|RIGHT|CROSS|NATURAL|STRAIGHT_JOIN|GROUP|ORDER|LIMIT|HAVING|UNION|AS)$/i;
+
+/**
+ * MySQL only accepts an unqualified "*" alone or first in the select list ("SELECT a, * FROM t" is a syntax
+ * error). For every SELECT (sub-queries too) this finds a bare "*" after other columns and the tables of
+ * that SELECT's FROM, so it can be written as "t.*". COUNT(*) and "*" first are left alone.
+ */
+export function bareStarFixes(text: string): StarFix[] {
+  const masked = maskSql(text);
+  const fixes: StarFix[] = [];
+  // each statement on its own (";" or a blank line before the next statement)
+  const ranges = smartStatements(text, { blankLines: true, dialect: 'mysql' });
+  const isWord = (c: string | undefined) => !!c && /[\w$]/.test(c);
+  const wordAt = (i: number) => (isWord(masked[i - 1]) ? '' : /^[A-Za-z_]+/.exec(masked.slice(i, i + 20))?.[0] ?? '');
+  for (const m of masked.matchAll(/\bSELECT\b/gi)) {
+    const n = ranges.find((r) => m.index! >= r.start && m.index! < r.end)?.end ?? masked.length;
+    let i = m.index! + 6;
+    // select list: up to FROM at the same bracket depth
+    let depth = 0;
+    let itemStart = i;
+    const items: [number, number][] = [];
+    let fromAt = -1;
+    for (; i < n; i++) {
+      const c = masked[i];
+      if (c === '(') depth++;
+      else if (c === ')') { if (depth === 0) break; depth--; }
+      else if (c === ';' && depth === 0) break;
+      else if (c === ',' && depth === 0) { items.push([itemStart, i]); itemStart = i + 1; }
+      else if (depth === 0 && /[Ff]/.test(c) && wordAt(i).toUpperCase() === 'FROM') { fromAt = i; break; }
+    }
+    items.push([itemStart, i]);
+    if (fromAt < 0) continue;
+    const stars = items.slice(1).filter(([a, b]) => masked.slice(a, b).trim() === '*');
+    if (!stars.length) continue;
+    // FROM clause: up to WHERE / GROUP BY / … at the same depth; nested brackets blanked out
+    let j = fromAt + 4;
+    depth = 0;
+    let from = 'FROM';
+    for (; j < n; j++) {
+      const c = masked[j];
+      if (c === '(') { depth++; from += '('; continue; }
+      if (c === ')') { if (depth === 0) break; depth--; from += ')'; continue; }
+      if (depth > 0) { from += ' '; continue; }
+      if (c === ';') break;
+      if (isWord(c) && !isWord(masked[j - 1]) && FROM_END.test(wordAt(j))) break;
+      from += c;
+    }
+    const quals: string[] = [];
+    const seen = new Set<string>();
+    const add = (q: string, at: number) => { if (!seen.has(q.toLowerCase())) { seen.add(q.toLowerCase()); quals.push(`${at}\u0000${q}`); } };
+    for (const r of parseTableRefs(from, '', 'mysql')) add(r.qualifier, r.index);
+    for (const d of from.matchAll(/\(\s*\)\s*(?:AS\s+)?([A-Za-z_$][\w$]*)/gi)) if (!NOT_ALIAS.test(d[1])) add(d[1], d.index!); // (SELECT …) x
+    if (!quals.length) continue;
+    const names = quals.sort((a, b) => parseInt(a) - parseInt(b)).map((q) => q.split('\u0000')[1]);
+    const replacement = names.map((q) => (/^[A-Za-z_$][\w$]*$/.test(q) ? q : '`' + q + '`') + '.*').join(', ');
+    for (const [a, b] of stars) {
+      const s = a + masked.slice(a, b).indexOf('*');
+      fixes.push({ start: s, end: s + 1, replacement });
+    }
+  }
+  return fixes;
+}
+
+/** Applies bareStarFixes (from the end, so offsets stay valid). Line numbers do not change. */
+export function fixBareStars(text: string): { sql: string; fixes: StarFix[] } {
+  const fixes = bareStarFixes(text);
+  let sql = text;
+  for (const f of [...fixes].sort((a, b) => b.start - a.start)) sql = sql.slice(0, f.start) + f.replacement + sql.slice(f.end);
+  return { sql, fixes };
+}
+
 // ---------------------------------------------------------------- statements without ";"
 
 /** One statement of a script. `noSemicolon`: it ends at a blank line (the next line starts a new statement). */

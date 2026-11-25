@@ -63,6 +63,8 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
   - **Did you mean…?** `Unknown column 'la.custmer_id'` → one click on `customer_id` fixes the query and runs it again.
   - **Safety hints:** warnings for `UPDATE` / `DELETE` without `WHERE` (asked again before running), `JOIN` without
     `ON`, and `SELECT *` without `WHERE` on tables with millions of rows.
+  - **`*` after columns:** MySQL rejects `select lads.id, * from … lads`; Rowlight sends it as `lads.*` (several
+    tables: `a.*, b.*`). A faint underline shows it, and **Ctrl+.** writes it in.
   - **No `;` needed between queries:** a blank line ends a statement when the next line starts a new one
     (`SELECT`, `INSERT`, `UPDATE`…). Not inside brackets, strings or comments, not after `UNION` / `AND` / a comma,
     and not between `INSERT INTO t (…)` and its `SELECT`. A faint underline shows where the `;` is missing

@@ -91,6 +91,8 @@ export interface SmartSettings {
   blankLineSplit: boolean;
   /** Ctrl+Enter runs the statement under the cursor; Ctrl+Shift+Enter runs the whole script. */
   runAtCursor: boolean;
+  /** MySQL: a bare "*" after other columns is sent as "alias.*" (otherwise a syntax error). */
+  fixStar: boolean;
 }
 
 export type UpdateMode = 'auto' | 'notify' | 'off';

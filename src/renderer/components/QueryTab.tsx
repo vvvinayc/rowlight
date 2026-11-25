@@ -5,7 +5,7 @@ import type { ConnectionConfig, QueryRunResult, ResultSet, SessionInfo } from '.
 import { api, ApiError, errorText, unwrap } from '../api';
 import { metaCache, subscribe as subscribeMeta } from '../metaCache';
 import { formatEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
-import { closestNames, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
+import { closestNames, fixBareStars, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
 import { parseTableRefs, baseName } from '../../shared/sqlAssist';
 import { smart } from '../smart';
 import { editorTheme } from '../theme';
@@ -271,6 +271,12 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     } else sql = model.getValue();
     if (!sql.trim()) return;
     if (conn.type === 'mysql' && smart().blankLineSplit) sql = withSemicolons(sql, split(sql));
+    // "a, b, *" is a syntax error in MySQL: send it as "a, b, lads.*"
+    let starNote = '';
+    if (conn.type === 'mysql' && smart().fixStar) {
+      const r = fixBareStars(sql);
+      if (r.fixes.length) { sql = r.sql; starNote = ` · * sent as ${r.fixes[0].replacement}`; }
+    }
     if (!readOnly && smart().safety) {
       const risky = statementsWithoutWhere(sql, conn.type);
       if (risky.length && !window.confirm(risky[0] + '\n\nRun it anyway?')) return;
@@ -288,7 +294,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
       if (failed?.error) { setError(failed.error.message); suggestFix(failed.error.message, failed.sql || sql); }
       setView(r.results.length && !failed ? 0 : 'messages');
       const rows = r.results.reduce((a, b) => a + b.rows.length, 0);
-      onStatus(r.cancelled ? 'Query cancelled' : failed ? 'Query failed' : `${r.results.length ? rows.toLocaleString() + ' rows' : 'Done'} in ${fmtMs(r.totalMs)}`);
+      onStatus((r.cancelled ? 'Query cancelled' : failed ? 'Query failed' : `${r.results.length ? rows.toLocaleString() + ' rows' : 'Done'} in ${fmtMs(r.totalMs)}`) + starNote);
       onHistoryChanged();
     } catch (e) {
       setError(errorText(e));

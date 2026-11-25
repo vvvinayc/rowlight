@@ -16,7 +16,7 @@ import { format as formatSqlText } from 'sql-formatter';
 import { metaCache } from './metaCache';
 import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType, TableInfo } from '../shared/types';
-import { clauseAt, functionsFor, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
+import { clauseAt, functionsFor, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, bareStarFixes, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
 import { rankKey, smart, usageFor } from './smart';
 
 (self as any).MonacoEnvironment = {
@@ -301,7 +301,7 @@ const BIG_TABLE_ROWS = 1_000_000;
 export function updateHints(model: monaco.editor.ITextModel) {
   const ctx = contexts.get(model.uri.toString());
   const markers: monaco.editor.IMarkerData[] = [];
-  if (ctx) markers.push(...missingSemicolonMarkers(model, ctx.type));
+  if (ctx) markers.push(...missingSemicolonMarkers(model, ctx.type), ...bareStarMarkers(model, ctx.type));
   if (!ctx || !smart().safety) { monaco.editor.setModelMarkers(model, 'rowlight-hints', markers); return; }
   const db = ctx.getDatabase();
   for (const h of lintSql(model.getValue(), db, ctx.type)) {
@@ -344,9 +344,41 @@ function missingSemicolonMarkers(model: monaco.editor.ITextModel, type: DbType):
   });
 }
 
+// ---------- "a, b, *" (MySQL rejects it): a hint on the "*", with a "Use lads.*" quick fix ----------
+const BARE_STAR = 'bareStar';
+
+function bareStarMarkers(model: monaco.editor.ITextModel, type: DbType): monaco.editor.IMarkerData[] {
+  if (type !== 'mysql') return []; // SQL Server accepts "SELECT a, *"
+  const on = smart().fixStar;
+  return bareStarFixes(model.getValue()).map((f) => {
+    const a = model.getPositionAt(f.start);
+    return {
+      severity: on ? monaco.MarkerSeverity.Hint : monaco.MarkerSeverity.Warning,
+      message: on
+        ? `MySQL needs ${f.replacement} here (a * after other columns is an error). Rowlight sends it as ${f.replacement}. Ctrl+. writes it in.`
+        : `MySQL needs ${f.replacement} here: a * after other columns is a syntax error. Ctrl+. fixes it.`,
+      code: BARE_STAR, source: 'Rowlight',
+      startLineNumber: a.lineNumber, startColumn: a.column, endLineNumber: a.lineNumber, endColumn: a.column + 1,
+    };
+  });
+}
+
 for (const lang of ['mysql', 'sql']) {
   monaco.languages.registerCodeActionProvider(lang, {
     provideCodeActions(model, _range, context) {
+      const stars = context.markers.filter((m) => m.code === BARE_STAR);
+      if (stars.length) {
+        const fixes = bareStarFixes(model.getValue());
+        const actions: monaco.languages.CodeAction[] = [];
+        for (const m of stars) {
+          const f = fixes.find((x) => { const p = model.getPositionAt(x.start); return p.lineNumber === m.startLineNumber && p.column === m.startColumn; });
+          if (!f) continue;
+          actions.push({ title: `Use ${f.replacement}`, kind: 'quickfix', diagnostics: [m], isPreferred: true,
+            edit: { edits: [{ resource: model.uri, versionId: model.getVersionId(),
+              textEdit: { range: new monaco.Range(m.startLineNumber, m.startColumn, m.endLineNumber, m.endColumn), text: f.replacement } }] } });
+        }
+        return { actions, dispose() {} };
+      }
       const hits = context.markers.filter((m) => m.code === MISSING_SEMI);
       if (!hits.length) return { actions: [], dispose() {} };
       const all = monaco.editor.getModelMarkers({ resource: model.uri, owner: 'rowlight-hints' }).filter((m) => m.code === MISSING_SEMI);
