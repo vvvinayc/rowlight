@@ -76,6 +76,8 @@ interface Api {
     removeCode(id: string): P<CodeStatus>;
   };
   history: { get(id: string): P<HistoryEntry[]>; clear(id: string): P<void> };
+  /** Encrypted (DPAPI) key/value store for tab text, saved queries and parameter values. */
+  private: { load(): P<{ data: Record<string, string>; encrypted: boolean }>; set(key: string, value: string | null): P<void> };
   settings: { get(): P<Settings>; save(s: Settings): P<Settings> };
   copyText(text: string): P<void>;
   logError?(text: string): P<void>;

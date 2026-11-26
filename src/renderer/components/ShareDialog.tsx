@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ConnectionConfig, McpShareInfo } from '../../shared/types';
 import { api, errorText, unwrap, type CodeStatus, type DesktopStatus } from '../api';
+import { defaultReadOnlyForName } from '../../shared/defaults';
 
 interface Props {
   conn: ConnectionConfig;
@@ -22,6 +23,9 @@ export function ShareDialog({ conn, info, onStart, onStop, onClose }: Props) {
   const [showCode, setShowCode] = useState(false);
   const [code, setCode] = useState<CodeStatus | null>(null);
   const [codeJustAdded, setCodeJustAdded] = useState(false);
+  // PROD / DR (by name, or coloured red): results leave this PC, so ask for an explicit OK first.
+  const looksProd = defaultReadOnlyForName(conn.name) || conn.color === 'red';
+  const [ack, setAck] = useState(false);
 
   useEffect(() => {
     unwrap(api.mcp.desktopStatus(conn.id)).then(setDesktop).catch(() => setDesktop(null));
@@ -123,6 +127,14 @@ export function ShareDialog({ conn, info, onStart, onStop, onClose }: Props) {
           <div className="step-no">2</div>
           <div className="step-body">
             <b>Share this connection</b> <span className="muted small">(each time you want Claude to use it)</span>
+            {!info && looksProd && (
+              <div className="prod-share-warning">
+                <b>⚠ “{conn.name}” looks like a production / DR connection.</b>
+                <div>The rows Claude asks for (customer names, loan details, amounts…) are sent to Claude (Anthropic) and leave this PC.
+                  Sharing is read-only and stops when you click Stop sharing, but check your company’s data policy before sharing real customer data.</div>
+                <label className="check"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> I understand, share this connection</label>
+              </div>
+            )}
             <div className="share-toggle">
               {info ? (
                 <>
@@ -132,7 +144,8 @@ export function ShareDialog({ conn, info, onStart, onStop, onClose }: Props) {
               ) : (
                 <>
                   <span className="muted">○ Not shared</span>
-                  <button className="primary" disabled={busy} onClick={() => act(onStart)}>{busy ? 'Starting…' : 'Start sharing'}</button>
+                  <button className="primary" disabled={busy || (looksProd && !ack)} onClick={() => act(onStart)}
+                    title={looksProd && !ack ? 'Tick the box above first' : undefined}>{busy ? 'Starting…' : 'Start sharing'}</button>
                 </>
               )}
             </div>

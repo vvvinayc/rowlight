@@ -426,3 +426,6 @@ kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--border); bo
 .compare-legend { display: flex; gap: 14px; padding: 4px 10px; }
 .compare-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: currentColor; vertical-align: middle; }
 .compare-picker { width: min(520px, 92vw); }
+
+/* Share with Claude: production warning */
+.prod-share-warning { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--warn, #d08a00); background: var(--warn-bg, #fff4dc); color: var(--warn-text, #6b4a00); border-radius: 6px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }

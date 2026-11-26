@@ -3,11 +3,12 @@
 import React, { useState } from 'react';
 import { sqlLiteral } from '../../shared/sqlParams';
 import { pastedList, toSqlList } from '../../shared/pasteList';
+import { getPrivate, setPrivate } from '../privateStore';
 
 const KEY = 'rowlight.paramValues';
 
 function remembered(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { return {}; }
+  try { return JSON.parse(getPrivate(KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 
 export function ParamsDialog({ names, textNames, onDone }: { names: string[]; /** Parameters used with a text column: pasted numbers get quotes. */ textNames?: string[]; onDone(values: Record<string, string> | null): void }) {
@@ -16,7 +17,7 @@ export function ParamsDialog({ names, textNames, onDone }: { names: string[]; /*
     return Object.fromEntries(names.map((n) => [n, r[n] ?? '']));
   });
   const ok = () => {
-    try { localStorage.setItem(KEY, JSON.stringify({ ...remembered(), ...values })); } catch { /* not important */ }
+    setPrivate(KEY, JSON.stringify({ ...remembered(), ...values }));
     onDone(values);
   };
   return (

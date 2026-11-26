@@ -1,4 +1,6 @@
-// Saved (favourite) queries, kept on this PC. Shared by all connections; each remembers where it was saved.
+import { getPrivate, setPrivate } from './privateStore';
+
+// Saved (favourite) queries, kept on this PC (encrypted). Shared by all connections; each remembers where it was saved.
 
 export interface SavedQuery {
   id: string;
@@ -15,11 +17,11 @@ const KEY = 'rowlight.savedQueries';
 const listeners = new Set<() => void>();
 
 export function listSaved(): SavedQuery[] {
-  try { const v = JSON.parse(localStorage.getItem(KEY) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+  try { const v = JSON.parse(getPrivate(KEY) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
 function write(list: SavedQuery[]) {
-  localStorage.setItem(KEY, JSON.stringify(list));
+  setPrivate(KEY, JSON.stringify(list));
   listeners.forEach((f) => f());
 }
 

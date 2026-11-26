@@ -36,6 +36,61 @@ function writeJson(file: string, value: unknown): void {
   fs.renameSync(tmp, file);
 }
 
+// ---------- encrypted files (history, open tabs, saved queries, parameter values) ----------
+// Windows DPAPI via safeStorage: readable only by this Windows user on this PC. Files written before 0.15 were plain
+// JSON; they are read once and rewritten encrypted.
+const SEALED = Buffer.from('RLENC1\n');
+
+function canSeal(): boolean {
+  try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
+}
+
+export function sealText(plain: string): Buffer {
+  return canSeal() ? Buffer.concat([SEALED, safeStorage.encryptString(plain)]) : Buffer.from(plain, 'utf8');
+}
+
+export function openText(data: Buffer): string {
+  if (data.subarray(0, SEALED.length).equals(SEALED)) return safeStorage.decryptString(data.subarray(SEALED.length));
+  return data.toString('utf8');
+}
+
+function readSealed<T>(file: string, fallback: T): T {
+  try { return JSON.parse(openText(fs.readFileSync(file))) as T; } catch { return fallback; }
+}
+
+function writeSealed(file: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, sealText(JSON.stringify(value)));
+  fs.renameSync(tmp, file);
+}
+
+// Small key/value store for the window (open tab text, saved queries, :param values). Writes are batched.
+let privateCache: Record<string, string> | null = null;
+let privateTimer: NodeJS.Timeout | null = null;
+const privateFile = () => path.join(dataDir(), 'private.dat');
+
+export function getPrivateAll(): Record<string, string> {
+  if (!privateCache) privateCache = readSealed<Record<string, string>>(privateFile(), {});
+  return { ...privateCache };
+}
+
+export function setPrivate(key: string, value: string | null): void {
+  getPrivateAll();
+  if (value === null) delete privateCache![key];
+  else privateCache![key] = value;
+  if (privateTimer) clearTimeout(privateTimer);
+  privateTimer = setTimeout(flushPrivate, 400);
+}
+
+export function flushPrivate(): void {
+  if (privateTimer) { clearTimeout(privateTimer); privateTimer = null; }
+  if (privateCache) writeSealed(privateFile(), privateCache);
+}
+
+/** True when private data is encrypted on disk (Windows DPAPI available). */
+export function privateEncrypted(): boolean { return canSeal(); }
+
 async function encrypt(plain: string): Promise<string> {
   if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     throw new Error('Windows encryption (DPAPI) is not available, so passwords cannot be saved. Use "Ask password every time".');
@@ -123,7 +178,7 @@ export async function saveConnection(input: ConnectionConfig, secrets: Secrets):
 
 export function deleteConnection(id: string): void {
   writeJson(connectionsFile(), loadStored().filter((x) => x.id !== id));
-  try { fs.rmSync(historyFile(id)); } catch { /* none */ }
+  for (const ext of ['.dat', '.json']) { try { fs.rmSync(historyFile(id, ext)); } catch { /* none */ } }
 }
 
 export function patchConnection(id: string, patch: Partial<StoredConnection>): void {
@@ -320,20 +375,28 @@ export function saveSettings(s: Partial<Settings>): Settings {
 
 // ---------- history ----------
 
-function historyFile(connectionId: string): string {
-  return path.join(dataDir(), 'history', connectionId.replace(/[^\w-]/g, '_') + '.json');
+function historyFile(connectionId: string, ext = '.dat'): string {
+  return path.join(dataDir(), 'history', connectionId.replace(/[^\w-]/g, '_') + ext);
 }
 
 export function getHistory(connectionId: string): HistoryEntry[] {
-  return readJson<HistoryEntry[]>(historyFile(connectionId), []);
+  const file = historyFile(connectionId);
+  if (fs.existsSync(file)) return readSealed<HistoryEntry[]>(file, []);
+  // Plain history from before 0.15: encrypt it once and remove the plain file.
+  const old = historyFile(connectionId, '.json');
+  if (!fs.existsSync(old)) return [];
+  const list = readJson<HistoryEntry[]>(old, []);
+  try { writeSealed(file, list); fs.rmSync(old); } catch { /* keep the old file */ }
+  return list;
 }
 
 export function addHistory(connectionId: string, entry: HistoryEntry): void {
   const list = getHistory(connectionId);
   list.unshift(entry);
-  writeJson(historyFile(connectionId), list.slice(0, HISTORY_MAX));
+  writeSealed(historyFile(connectionId), list.slice(0, HISTORY_MAX));
 }
 
 export function clearHistory(connectionId: string): void {
-  writeJson(historyFile(connectionId), []);
+  writeSealed(historyFile(connectionId), []);
+  try { fs.rmSync(historyFile(connectionId, '.json')); } catch { /* none */ }
 }

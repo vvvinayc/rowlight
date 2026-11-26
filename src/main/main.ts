@@ -245,6 +245,8 @@ function registerIpc() {
   handle('clipboard:write', (text: string) => clipboard.writeText(String(text)));
 
   handle('history:get', (id: string) => store.getHistory(id));
+  handle('private:load', () => ({ data: store.getPrivateAll(), encrypted: store.privateEncrypted() }));
+  handle('private:set', (key: string, value: string | null) => store.setPrivate(String(key), value === null ? null : String(value)));
   handle('history:clear', (id: string) => store.clearHistory(id));
 
   handle('settings:get', () => store.getSettings());
@@ -357,6 +359,7 @@ app.whenReady().then(async () => {
   updater.initUpdater(() => win, store.getSettings().autoUpdate ?? 'auto');
 });
 
+app.on('will-quit', () => { try { store.flushPrivate(); } catch { /* best effort */ } });
 app.on('window-all-closed', async () => {
   for (const id of [...sessions.keys()]) await closeSession(id).catch(() => {});
   app.quit();

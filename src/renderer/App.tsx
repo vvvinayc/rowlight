@@ -11,6 +11,7 @@ import { ConnectionDialog } from './components/ConnectionDialog';
 import { QueryTab, type EditorHandle, type TabState } from './components/QueryTab';
 import { HistoryPanel } from './components/HistoryPanel';
 import { SavedQueriesDialog } from './components/SavedQueries';
+import { getPrivate, setPrivate } from './privateStore';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { invalidateUsage, setSmartSettings } from './smart';
 import { ConfirmDialog, PasswordPrompt, SettingsDialog, SshPromptDialog, type PromptNeeds } from './components/Dialogs';
@@ -114,7 +115,7 @@ export function App() {
     if (restored.current || !connections.length) return;
     restored.current = true;
     try {
-      const saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? 'null') as PersistedTabs | null;
+      const saved = JSON.parse(getPrivate(TABS_KEY) ?? 'null') as PersistedTabs | null;
       if (!saved?.tabs?.length) return;
       const list = saved.tabs.filter((t) => connections.some((c) => c.id === t.connId));
       for (const t of list) {
@@ -139,7 +140,7 @@ export function App() {
           savedSql: savedTexts.current.get(t.id),
         })),
       };
-      try { localStorage.setItem(TABS_KEY, JSON.stringify(data)); } catch { /* quota: ignore */ }
+      setPrivate(TABS_KEY, JSON.stringify(data));
     }, 500);
   }, []);
   const tabsRef = useRef(tabs);

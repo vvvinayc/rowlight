@@ -6,9 +6,11 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { api } from './api';
+import { initPrivate } from './privateStore';
 
 applyTheme(); // before the first paint, so there is no flash of the wrong theme
 // Uncaught errors go to userData/logs/renderer.log (helps with "the window went blank" reports).
 window.addEventListener('error', (e) => api.logError?.('[window] ' + (e.error?.stack ?? e.message)));
 window.addEventListener('unhandledrejection', (e) => api.logError?.('[promise] ' + ((e.reason as Error)?.stack ?? String(e.reason))));
-createRoot(document.getElementById('root')!).render(<ErrorBoundary label="app"><App /></ErrorBoundary>);
+// Tab text, saved queries and parameter values are loaded (decrypted) before the first render.
+initPrivate().finally(() => createRoot(document.getElementById('root')!).render(<ErrorBoundary label="app"><App /></ErrorBoundary>));

@@ -34,6 +34,11 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 - **Saved SSH profiles**: define a bastion once and reuse it in many connections, with one **default** for new
   connections. Change the bastion password in one place.
 - Passwords are encrypted with **Windows DPAPI** (Electron `safeStorage`), or choose **"Ask password every time"**.
+- **Query history, open tab text, saved queries and `:param` values are encrypted too** (Windows DPAPI, readable only by
+  your Windows user on this PC): `history\*.dat` and `private.dat` in `%APPDATA%\Rowlight`. Plain files from older
+  versions are converted on first start. Exported CSV / Excel files are not encrypted (they are saved where you choose).
+- **Share with Claude** on a PROD / DR connection (by name, or coloured red) asks for an explicit OK first: the rows Claude
+  asks for leave this PC.
 - Host-key "trust on first use", with a clear warning if the key changes.
 - **Connection colours** (e.g. red for prod), shown on the sidebar, tabs and toolbar.
 - **Import / export** connections: without passwords (to share with colleagues), or with passwords encrypted by your

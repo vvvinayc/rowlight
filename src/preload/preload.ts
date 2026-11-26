@@ -61,6 +61,10 @@ const api = {
     addCode: (id: string) => call('mcp:addCode', id),
     removeCode: (id: string) => call('mcp:removeCode', id),
   },
+  private: {
+    load: () => call('private:load'),
+    set: (key: string, value: string | null) => call('private:set', key, value),
+  },
   history: {
     get: (id: string) => call('history:get', id),
     clear: (id: string) => call('history:clear', id),
