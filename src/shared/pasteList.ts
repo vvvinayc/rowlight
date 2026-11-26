@@ -24,8 +24,8 @@ export function pastedList(text: string): string[] | null {
 const isNum = (s: string) => /^-?\d+(\.\d+)?$/.test(s) && !/^0\d/.test(s); // 007 is a code, not a number
 
 /** 'a', 'b', 'c' (numbers without quotes). More than 10 values: one per line. */
-export function toSqlList(items: string[], indent = '  '): string {
-  const allNum = items.every(isNum);
+export function toSqlList(items: string[], indent = '  ', textColumn = false): string {
+  const allNum = !textColumn && items.every(isNum);
   const vals = items.map((v) => (allNum ? v : "'" + v.replace(/'/g, "''") + "'"));
   return vals.length > 10 ? '\n' + indent + vals.join(',\n' + indent) + '\n' : vals.join(', ');
 }
@@ -58,19 +58,37 @@ export interface ListPaste {
  * Only where SQL clearly expects a list: after "IN (", after "IN", or after "=" / "<>" / "!=" (turned into IN / NOT IN).
  * Elsewhere, and inside strings or comments: null (the paste stays as it is).
  */
-export function listPaste(before: string, pasted: string): ListPaste | null {
+export function listPaste(before: string, pasted: string, textColumn = false): ListPaste | null {
   const items = pastedList(pasted);
   if (!items) return null;
   if (insideStringOrComment(before)) return null;
   const tail = maskSql(before.slice(-400));
   const n = items.length;
   let m: RegExpMatchArray | null;
-  if ((m = /\bin\s*\(\s*$/i.exec(tail))) return { replaceBefore: 0, text: toSqlList(items), note: `${n} values pasted as a list` };
-  if ((m = /\bin\s*$/i.exec(tail))) return { replaceBefore: 0, text: '(' + toSqlList(items) + ')', note: `${n} values pasted as a list` };
+  if ((m = /\bin\s*\(\s*$/i.exec(tail))) return { replaceBefore: 0, text: toSqlList(items, '  ', textColumn), note: `${n} values pasted as a list` };
+  if ((m = /\bin\s*$/i.exec(tail))) return { replaceBefore: 0, text: '(' + toSqlList(items, '  ', textColumn) + ')', note: `${n} values pasted as a list` };
   if ((m = /(<>|!=|=)\s*$/.exec(tail))) {
     const op = m[1] === '=' ? 'in' : 'not in';
     const prefix = /\s$/.test(tail.slice(0, tail.length - m[0].length)) ? '' : ' ';
-    return { replaceBefore: m[0].length, text: `${prefix}${op} (${toSqlList(items)})`, note: `${n} values pasted: "${m[1]}" became ${op.toUpperCase()} (…)` };
+    return { replaceBefore: m[0].length, text: `${prefix}${op} (${toSqlList(items, '  ', textColumn)})`, note: `${n} values pasted: "${m[1]}" became ${op.toUpperCase()} (…)` };
   }
   return null;
 }
+
+/** True when every pasted value is a plain number (then the column type decides about quotes). */
+export function allNumbers(pasted: string): boolean {
+  const items = pastedList(pasted);
+  return !!items && items.every(isNum);
+}
+
+/** The column the list is for: "nspa.loan_id in (" -> { qualifier: 'nspa', column: 'loan_id' }. */
+export function listColumn(before: string): { qualifier?: string; column: string } | null {
+  const tail = maskSql(before.slice(-400));
+  const m = /([`"\[]?[\w$]+[`"\]]?)(?:\s*\.\s*([`"\[]?[\w$]+[`"\]]?))?\s*(?:(?:not\s+)?in\s*\(?|<>|!=|=)\s*$/i.exec(tail);
+  if (!m) return null;
+  const clean = (s: string) => s.replace(/^[`"\[]|[`"\]]$/g, '');
+  return m[2] ? { qualifier: clean(m[1]), column: clean(m[2]) } : { column: clean(m[1]) };
+}
+
+/** Database column types that hold text (values need quotes even when they look like numbers). */
+export const isTextType = (type: string) => /char|text|enum|set|uuid|uniqueidentifier|binary|json|date|time/i.test(type);

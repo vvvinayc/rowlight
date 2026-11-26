@@ -37,3 +37,13 @@ test('left alone: inside strings / comments, or where no list is expected', () =
   assert.equal(listPaste('', IDS), null);
   assert.equal(listPaste("where a = 'x' and id in (", IDS)!.text, Q);
 });
+
+test('column before the list, and text column types', async () => {
+  const { listColumn, isTextType, allNumbers } = await import('../src/shared/pasteList');
+  assert.deepEqual(listColumn('SELECT * from x nspa\nwhere nspa.loan_id in ('), { qualifier: 'nspa', column: 'loan_id' });
+  assert.deepEqual(listColumn('where loan_id = '), { column: 'loan_id' });
+  assert.deepEqual(listColumn('where `a`.`loan_id` not in ('), { qualifier: 'a', column: 'loan_id' });
+  assert.ok(isTextType('varchar(50)') && isTextType('char(24)') && !isTextType('bigint(20)') && !isTextType('int unsigned') && !isTextType('decimal(12,2)'));
+  assert.ok(allNumbers('2705820\n2748296') && !allNumbers('6af4\n6af5'));
+  assert.equal(listPaste('where nspa.loan_id in (', '2705820\n2748296', true)!.text, "'2705820', '2748296'");
+});

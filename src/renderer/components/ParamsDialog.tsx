@@ -10,7 +10,7 @@ function remembered(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 
-export function ParamsDialog({ names, onDone }: { names: string[]; onDone(values: Record<string, string> | null): void }) {
+export function ParamsDialog({ names, textNames, onDone }: { names: string[]; /** Parameters used with a text column: pasted numbers get quotes. */ textNames?: string[]; onDone(values: Record<string, string> | null): void }) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const r = remembered();
     return Object.fromEntries(names.map((n) => [n, r[n] ?? '']));
@@ -36,7 +36,7 @@ export function ParamsDialog({ names, onDone }: { names: string[]; onDone(values
                     const items = pastedList(e.clipboardData.getData('text'));
                     if (!items) return;
                     e.preventDefault();
-                    setValues((v) => ({ ...v, [n]: toSqlList(items).replace(/\s*\n\s*/g, ' ').trim() }));
+                    setValues((v) => ({ ...v, [n]: toSqlList(items, '  ', !!textNames?.includes(n)).replace(/\s*\n\s*/g, ' ').trim() }));
                   }}
                   onChange={(e) => setValues((v) => ({ ...v, [n]: e.target.value }))} /></td>
                 <td className="muted small param-sql">{values[n].trim() ? sqlLiteral(values[n]) : ''}</td>

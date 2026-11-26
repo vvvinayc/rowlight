@@ -8,7 +8,7 @@ import { ParamsDialog } from './ParamsDialog';
 import { SaveQueryDialog } from './SavedQueries';
 import { CompareView, ComparePicker, type CompareData } from './CompareView';
 import { compareTables, isReadOnlyQuery } from '../../shared/compare';
-import { listPaste, pastedList, toSqlList } from '../../shared/pasteList';
+import { allNumbers, isTextType, listColumn, listPaste, pastedList, toSqlList } from '../../shared/pasteList';
 import { findParams, fillParams } from '../../shared/sqlParams';
 import { formatEditor, minifyJsonInEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
 import { closestNames, fixBareStars, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
@@ -95,6 +95,9 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   textChangeRef.current = onTextChange;
   const onStatusRef = useRef(onStatus);
   onStatusRef.current = onStatus;
+  /** Is the column before "in (" / "=" a text column? Looked up in the table metadata (cached). */
+  const columnIsTextRef = useRef<(before: string) => Promise<boolean>>(async () => false);
+  const columnIsText = (before: string) => columnIsTextRef.current(before);
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [db, setDb] = useState(session?.currentDatabase ?? conn.database);
@@ -103,7 +106,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryRunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paramAsk, setParamAsk] = useState<{ names: string[]; resolve(v: Record<string, string> | null): void } | null>(null);
+  const [paramAsk, setParamAsk] = useState<{ names: string[]; textNames: string[]; resolve(v: Record<string, string> | null): void } | null>(null);
   const [saving2, setSavingQuery] = useState<string | null>(null);
   /** The selection, else the statement under the cursor, else the whole script. */
   const queryForSave = () => {
@@ -122,7 +125,15 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     if (!sql.trim()) { onStatus('Nothing to save: write a query first'); return; }
     setSavingQuery(sql);
   };
-  const askParams = (names: string[]) => new Promise<Record<string, string> | null>((resolve) => setParamAsk({ names, resolve }));
+  const askParams = async (names: string[], sql = '') => {
+    // Which parameters are compared with a text column (loan_id VARCHAR in (:ids)): pasted numbers get quotes there.
+    const textNames: string[] = [];
+    await Promise.all(names.map(async (n) => {
+      const at = sql.search(new RegExp(':' + n + '(?![\\w])'));
+      if (at > 0 && await columnIsText(sql.slice(0, at)).catch(() => false)) textNames.push(n);
+    }));
+    return new Promise<Record<string, string> | null>((resolve) => setParamAsk({ names, textNames, resolve }));
+  };
   /** "Did you mean …?" for an unknown column / table in the last error. */
   const [fix, setFix] = useState<{ missing: MissingName; options: string[]; sql: string } | null>(null);
   const [view, setView] = useState<number | 'messages' | 'compare'>(0);
@@ -232,13 +243,22 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     editor.addAction({ id: 'rowlight.saveQuery', label: '☆ Save this query (find it later with Ctrl+P)', contextMenuGroupId: '1_modification', contextMenuOrder: 1, run: () => saveQueryRef.current() });
     editor.addAction({ id: 'rowlight.compare', label: '⇄ Compare with another connection…', contextMenuGroupId: '1_modification', contextMenuOrder: 1.5, run: () => setPicker(true) });
     // Pasting a column of values after "IN (" or "=": quote them and make an IN list.
-    editor.onDidPaste((e) => {
+    editor.onDidPaste(async (e) => {
       if (!smart().pasteList) return;
       const model = editor.getModel();
       if (!model || e.range.isEmpty()) return;
       const pasted = model.getValueInRange(e.range);
       const start = model.getOffsetAt(e.range.getStartPosition());
-      const r = listPaste(model.getValue().slice(Math.max(0, start - 2000), start), pasted);
+      const before = model.getValue().slice(Math.max(0, start - 4000), start);
+      if (!listPaste(before, pasted)) return;
+      // Numbers for a text column (e.g. loan_id VARCHAR) still need quotes: ask the column type.
+      let textColumn = false;
+      if (allNumbers(pasted)) {
+        const version = model.getAlternativeVersionId();
+        textColumn = await columnIsText(before).catch(() => false);
+        if (model.getAlternativeVersionId() !== version) return; // typed meanwhile: leave the paste as it is
+      }
+      const r = listPaste(before, pasted, textColumn);
       if (!r) return;
       const from = model.getPositionAt(start - r.replaceBefore);
       const range = new monaco.Range(from.lineNumber, from.column, e.range.endLineNumber, e.range.endColumn);
@@ -354,7 +374,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     if (smart().params) {
       const names = findParams(sql);
       if (names.length) {
-        const values = await askParams(names);
+        const values = await askParams(names, sql);
         editor.focus();
         if (!values) return;
         sql = fillParams(sql, values);
@@ -395,6 +415,20 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   }
   runRef.current = run;
 
+  columnIsTextRef.current = async (before: string) => {
+    const col = listColumn(before);
+    if (!col || !connected) return false;
+    const refs = parseTableRefs(before, db || conn.database, conn.type);
+    const q = col.qualifier?.toLowerCase();
+    const cands = q ? refs.filter((r) => r.qualifier.toLowerCase() === q || r.table.toLowerCase().endsWith(q)) : refs;
+    for (const r of cands.slice(-4).reverse()) {
+      const cols = await Promise.race([metaCache.columns(conn.id, r.db, r.table), new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 2500))]);
+      const c = cols.find((x) => x.name.toLowerCase() === col.column.toLowerCase());
+      if (c) return isTextType(c.type);
+    }
+    return false;
+  };
+
   // ---------- ⇄ Compare with another connection ----------
   const partnerId = [conn.compareWith, lastCompare(conn.id)].find((id) => id && id !== conn.id && connections.some((c) => c.id === id && c.type === conn.type));
   const partner = connections.find((c) => c.id === partnerId);
@@ -411,7 +445,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     if (!isReadOnlyQuery(sql)) { setError('Compare only runs SELECT queries, so nothing is changed on either connection.'); return; }
     if (smart().params) {
       const names = findParams(sql);
-      if (names.length) { const values = await askParams(names); if (!values) return; sql = fillParams(sql, values); }
+      if (names.length) { const values = await askParams(names, sql); if (!values) return; sql = fillParams(sql, values); }
     }
     if (conn.type === 'mysql' && smart().fixStar) sql = fixBareStars(sql).sql;
     rememberCompare(conn.id, otherId);
@@ -556,7 +590,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
       {picker && <ComparePicker self={conn} connections={connections} connected={sessions}
         onClose={() => { setPicker(false); editorRef.current?.focus(); }}
         onPick={(id) => { setPicker(false); runCompareRef.current(id); }} />}
-      {paramAsk && <ParamsDialog names={paramAsk.names} onDone={(v) => { paramAsk.resolve(v); setParamAsk(null); }} />}
+      {paramAsk && <ParamsDialog names={paramAsk.names} textNames={paramAsk.textNames} onDone={(v) => { paramAsk.resolve(v); setParamAsk(null); }} />}
       <div className={'toolbar' + (connectionColor(conn.color) ? ' colored' : '')}
         style={{ ['--conn-color' as string]: connectionColor(conn.color) } as React.CSSProperties}>
         <button className="primary" onClick={() => run()} disabled={running || !connected}

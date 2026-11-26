@@ -85,7 +85,7 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
   changed values, rows only on one side, and how many are the same. SELECT only. Unpaired connections show no button;
   use right-click → *Compare with another connection…* (or ▾) to pick one, which is then remembered.
 - **Paste a column of values:** copy IDs (one per line) and paste after `where loan_id in (` or `where loan_id = `:
-  they become `('6af4…', '6af5…', '6afb…')` (numbers without quotes; `=` becomes `IN`; Ctrl+Z undoes). Also works in
+  they become `('6af4…', '6af5…', '6afb…')` (numbers get quotes only when the column is text, e.g. `loan_id` VARCHAR; `=` becomes `IN`; Ctrl+Z undoes). Also works in
   UPDATE / DELETE, in a `:ids` value box, and with right-click → *Make a list* on selected lines.
 - **Saved queries:** **☆ Save** in the tab (or right-click → *Save this query*) saves the query under the cursor with a
   name. **Ctrl+P** (or **★ Saved**) finds it by a few words: Enter opens it in a new tab, Ctrl+Enter opens and runs it.
