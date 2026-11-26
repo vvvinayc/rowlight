@@ -50,6 +50,8 @@ export interface ConnectionConfig {
   ssh: SshConfig;
   /** Colour name from CONNECTION_COLORS (e.g. "red" for prod), shown on tabs and toolbar. */
   color?: string;
+  /** Partner connection (e.g. LP Production ↔ DR): the query tab gets a "⇄ Compare with …" button. */
+  compareWith?: string;
   /** SQL Server only. */
   mssqlEncrypt?: boolean;
   mssqlTrustCert?: boolean;

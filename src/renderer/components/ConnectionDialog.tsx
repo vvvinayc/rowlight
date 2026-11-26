@@ -9,6 +9,8 @@ interface Props {
   initial?: ConnectionConfig;
   /** Saved SSH profiles (bastions shared by many connections). */
   profiles: SshProfile[];
+  /** All saved connections, for "Compare with". */
+  connections?: ConnectionConfig[];
   onManageProfiles(selectId?: string): void;
   onProfilesChanged(): Promise<void> | void;
   onClose: () => void;
@@ -25,7 +27,7 @@ function blank(def?: SshProfile): ConnectionConfig {
   };
 }
 
-export function ConnectionDialog({ initial, profiles, onManageProfiles, onProfilesChanged, onClose, onSaved }: Props) {
+export function ConnectionDialog({ initial, profiles, connections = [], onManageProfiles, onProfilesChanged, onClose, onSaved }: Props) {
   const [c, setC] = useState<ConnectionConfig>(() => (initial ? structuredClone(initial) : blank(profiles.find((p) => p.isDefault))));
   const profile = c.ssh.enabled && c.ssh.profileId ? profiles.find((p) => p.id === c.ssh.profileId) : undefined;
   const [secrets, setSecrets] = useState<Secrets>({});
@@ -160,6 +162,16 @@ export function ConnectionDialog({ initial, profiles, onManageProfiles, onProfil
                 style={{ background: hex }} onClick={() => set({ color: name })} />
             ))}
             <span className="muted small">shown on tabs and the toolbar (tip: red for prod / DR)</span>
+          </div>
+
+          <div className="row2">
+            <label className="grow">Compare with
+              <select value={c.compareWith ?? ''} onChange={(e) => set({ compareWith: e.target.value || undefined })}>
+                <option value="">(none)</option>
+                {connections.filter((x) => x.id !== c.id && x.type === c.type).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+            <span className="muted small align-end">e.g. LP Production ↔ DR: the query tab gets a “⇄ Compare with …” button that runs the query on both and shows the differences.</span>
           </div>
 
           <fieldset>

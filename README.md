@@ -80,6 +80,10 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
   (`payload.UTR`, `payload.UDF20`…) to filter, sort, copy and export. Values are kept exactly as stored.
 - **Parameters:** write `where loan_id = :loan` and run; a box asks for `:loan` (numbers as they are, text quoted,
   `1,2,3` for IN; the last value is remembered). Settings → Smart features → *Ask for :name values*.
+- **⇄ Compare with another connection:** pair two connections once (✎ Edit → *Compare with*, e.g. LP Production ↔ DR;
+  it pairs both ways). The query tab then has **⇄ Compare with DR**: it runs the query under the cursor on both and shows
+  changed values, rows only on one side, and how many are the same. SELECT only. Unpaired connections show no button;
+  use right-click → *Compare with another connection…* (or ▾) to pick one, which is then remembered.
 - **Saved queries:** **☆ Save** in the tab (or right-click → *Save this query*) saves the query under the cursor with a
   name. **Ctrl+P** (or **★ Saved**) finds it by a few words: Enter opens it in a new tab, Ctrl+Enter opens and runs it.
 - **JSON cells:** double-click a cell holding JSON and it opens formatted (*As stored* shows the raw text).

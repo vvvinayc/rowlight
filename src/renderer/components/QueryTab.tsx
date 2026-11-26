@@ -6,6 +6,8 @@ import { api, ApiError, errorText, unwrap } from '../api';
 import { metaCache, subscribe as subscribeMeta } from '../metaCache';
 import { ParamsDialog } from './ParamsDialog';
 import { SaveQueryDialog } from './SavedQueries';
+import { CompareView, ComparePicker, type CompareData } from './CompareView';
+import { compareTables, isReadOnlyQuery } from '../../shared/compare';
 import { findParams, fillParams } from '../../shared/sqlParams';
 import { formatEditor, minifyJsonInEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
 import { closestNames, fixBareStars, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
@@ -63,6 +65,18 @@ interface Props {
   onTextChange(tabId: string, text: string): void;
   /** True while this connection is shared with Claude. */
   shared: boolean;
+  /** All connections and the open sessions, for "⇄ Compare with …". */
+  connections: ConnectionConfig[];
+  sessions: Record<string, SessionInfo>;
+  onConnect(id: string): Promise<void>;
+}
+
+const COMPARE_LAST_KEY = 'rowlight.compareLast';
+function lastCompare(connId: string): string | undefined {
+  try { return JSON.parse(localStorage.getItem(COMPARE_LAST_KEY) ?? '{}')[connId]; } catch { return undefined; }
+}
+function rememberCompare(connId: string, otherId: string) {
+  try { const m = JSON.parse(localStorage.getItem(COMPARE_LAST_KEY) ?? '{}'); m[connId] = otherId; localStorage.setItem(COMPARE_LAST_KEY, JSON.stringify(m)); } catch { /* not important */ }
 }
 
 type RunMode = 'cursor' | 'script';
@@ -75,7 +89,7 @@ function flashRange(editor: monaco.editor.IStandaloneCodeEditor, model: monaco.e
   setTimeout(() => deco.clear(), 700);
 }
 
-export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onToggleReadOnly, onRegister, onStatus, onHistoryChanged, onShare, shared, onTextChange }: Props) {
+export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onToggleReadOnly, onRegister, onStatus, onHistoryChanged, onShare, shared, onTextChange, connections, sessions, onConnect }: Props) {
   const textChangeRef = useRef(onTextChange);
   textChangeRef.current = onTextChange;
   const hostRef = useRef<HTMLDivElement>(null);
@@ -108,7 +122,11 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   const askParams = (names: string[]) => new Promise<Record<string, string> | null>((resolve) => setParamAsk({ names, resolve }));
   /** "Did you mean …?" for an unknown column / table in the last error. */
   const [fix, setFix] = useState<{ missing: MissingName; options: string[]; sql: string } | null>(null);
-  const [view, setView] = useState<number | 'messages'>(0);
+  const [view, setView] = useState<number | 'messages' | 'compare'>(0);
+  const [compare, setCompare] = useState<CompareData | null>(null);
+  const [picker, setPicker] = useState(false);
+  const compareSessions = useRef(new Set<string>());
+  useEffect(() => () => { for (const id of compareSessions.current) api.query.closeTab(id, tab.id + '~cmp'); }, [tab.id]);
   // Editor height (the divider) and whether the results panel is open are remembered across tabs and restarts.
   const [editorH, setEditorHState] = useState(() => {
     try { const v = Number(localStorage.getItem(EDITOR_H_KEY)); return v >= 80 ? v : 260; } catch { return 260; }
@@ -209,6 +227,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     // addAction is scoped to this editor instance.
     editor.addAction({ id: 'rowlight.format', label: 'Format SQL', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF], run: () => doFormatRef.current() });
     editor.addAction({ id: 'rowlight.saveQuery', label: '☆ Save this query (find it later with Ctrl+P)', contextMenuGroupId: '1_modification', contextMenuOrder: 1, run: () => saveQueryRef.current() });
+    editor.addAction({ id: 'rowlight.compare', label: '⇄ Compare with another connection…', contextMenuGroupId: '1_modification', contextMenuOrder: 1.5, run: () => setPicker(true) });
     editor.addAction({ id: 'rowlight.jsonPretty', label: 'JSON: format (indent)', contextMenuGroupId: '1_modification', contextMenuOrder: 2, run: () => doFormatRef.current() });
     editor.addAction({ id: 'rowlight.jsonMinify', label: 'JSON: one line', contextMenuGroupId: '1_modification', contextMenuOrder: 3,
       run: () => { const err = minifyJsonInEditor(editor); if (err) setError(err); } });
@@ -341,6 +360,60 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     }
   }
   runRef.current = run;
+
+  // ---------- ⇄ Compare with another connection ----------
+  const partnerId = [conn.compareWith, lastCompare(conn.id)].find((id) => id && id !== conn.id && connections.some((c) => c.id === id && c.type === conn.type));
+  const partner = connections.find((c) => c.id === partnerId);
+  const runCompareRef = useRef<(otherId: string) => void>(() => {});
+  runCompareRef.current = async (otherId: string) => {
+    const other = connections.find((c) => c.id === otherId);
+    if (!other || running) return;
+    if (!connected) { setError('Not connected. Connect the connection in the sidebar first.'); return; }
+    let sql = queryForSave().trim();
+    if (!sql) { onStatus('Write a query first'); return; }
+    const parts = smartStatements(sql, { blankLines: smart().blankLineSplit, dialect: conn.type }).filter((r) => sql.slice(r.start, r.end).trim());
+    if (parts.length > 1) { setError('Compare runs one query at a time: put the cursor in one query, or select it.'); return; }
+    sql = sql.replace(/;\s*$/, '');
+    if (!isReadOnlyQuery(sql)) { setError('Compare only runs SELECT queries, so nothing is changed on either connection.'); return; }
+    if (smart().params) {
+      const names = findParams(sql);
+      if (names.length) { const values = await askParams(names); if (!values) return; sql = fillParams(sql, values); }
+    }
+    if (conn.type === 'mysql' && smart().fixStar) sql = fixBareStars(sql).sql;
+    rememberCompare(conn.id, otherId);
+    if (!sessions[otherId]) { onStatus(`Connecting to ${other.name}…`); await onConnect(otherId); }
+    compareSessions.current.add(otherId);
+    const useDb = db ? (conn.type === 'mysql' ? 'USE `' + db.replace(/`/g, '``') + '`;\n' : 'USE [' + db.replace(/]/g, ']]') + '];\n') : '';
+    const runOn = async (id: string, tabId: string, text: string): Promise<{ table?: { columns: string[]; rows: unknown[][] }; limited?: boolean; error?: string }> => {
+      try {
+        const r = await unwrap(api.query.run(id, tabId, text));
+        const failed = r.messages.find((m) => m.error);
+        if (failed?.error) return { error: failed.error.message };
+        const rs = r.results[r.results.length - 1];
+        if (!rs) return { error: 'The query returned no rows table.' };
+        return { table: { columns: rs.columns, rows: rs.rows }, limited: !!rs.limitApplied };
+      } catch (e) { return { error: errorText(e) }; }
+    };
+    setRunning(true); setError(null); setFix(null); setResultsOpen(true);
+    const t0 = performance.now();
+    try {
+      const [ra, rb] = await Promise.all([runOn(conn.id, tab.id, sql), runOn(otherId, tab.id + '~cmp', useDb + sql)]);
+      const data: CompareData = {
+        aName: conn.name, bName: other.name, sql, a: ra.table ?? null, b: rb.table ?? null,
+        aError: ra.error, bError: rb.error, limited: !!(ra.limited || rb.limited), ms: Math.round(performance.now() - t0),
+      };
+      setCompare(data);
+      setView('compare');
+      if (data.a && data.b) {
+        const c = compareTables(data.a, data.b).counts;
+        const n = c.changed + c.onlyA + c.onlyB;
+        onStatus(n ? `⇄ ${other.name}: ${c.changed} different, ${c.onlyA} only in ${conn.name}, ${c.onlyB} only in ${other.name}` : `⇄ Same on ${conn.name} and ${other.name} (${c.same} rows)`);
+      } else onStatus('Compare failed');
+      onHistoryChanged();
+    } finally {
+      setRunning(false);
+    }
+  };
   doFormatRef.current = () => {
     if (!editorRef.current) return;
     const err = formatEditor(editorRef.current);
@@ -439,13 +512,16 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   function changeLayout(l: ResultLayout) {
     setLayout(l);
     try { localStorage.setItem(LAYOUT_KEY, l); } catch { /* ignore */ }
-    if (l === 'tabs' && view !== 'messages') setView(0);
+    if (l === 'tabs' && typeof view === 'number') setView(0);
   }
   const totalRows = result?.results.reduce((a, b) => a + b.rows.length, 0) ?? 0;
 
   return (
     <div className="query-tab" style={{ display: active ? 'flex' : 'none' }}>
       {saving2 !== null && <SaveQueryDialog sql={saving2} connName={conn.name} onStatus={onStatus} onClose={() => { setSavingQuery(null); editorRef.current?.focus(); }} />}
+      {picker && <ComparePicker self={conn} connections={connections} connected={sessions}
+        onClose={() => { setPicker(false); editorRef.current?.focus(); }}
+        onPick={(id) => { setPicker(false); runCompareRef.current(id); }} />}
       {paramAsk && <ParamsDialog names={paramAsk.names} onDone={(v) => { paramAsk.resolve(v); setParamAsk(null); }} />}
       <div className={'toolbar' + (connectionColor(conn.color) ? ' colored' : '')}
         style={{ ['--conn-color' as string]: connectionColor(conn.color) } as React.CSSProperties}>
@@ -456,6 +532,13 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
         )}
         <button onClick={cancel} disabled={!running} title="Cancel the running query">■ Cancel</button>
         <button onClick={() => saveQueryRef.current()} title="Save the query under the cursor (or the selection) with a name. Ctrl+P finds it again.">☆ Save</button>
+        {partner && (
+          <span className="split-btn">
+            <button onClick={() => runCompareRef.current(partner.id)} disabled={running || !connected}
+              title={`Run the query under the cursor on ${conn.name} and ${partner.name} and show the differences (SELECT only)`}>⇄ Compare with {partner.name}</button>
+            <button onClick={() => setPicker(true)} disabled={running || !connected} title="Compare with another connection…">▾</button>
+          </span>
+        )}
         <button onClick={() => doFormatRef.current()} title="Format the selection, or the whole script (Ctrl+Shift+F)">Format</button>
         <label className="db-select">DB
           <select value={db} onChange={(e) => changeDb(e.target.value)} disabled={!connected || running}
@@ -495,6 +578,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
               Result {i + 1} <span className="muted">({rs.rows.length.toLocaleString()}{rs.limitApplied && paging[i]?.hasMore !== false ? ', more available' : ''})</span>
             </button>
           ))}
+          {compare && <button className={view === 'compare' ? 'active' : ''} onClick={() => setView('compare')} title={compare.sql}>⇄ Compare</button>}
           <button className={view === 'messages' ? 'active' : ''} onClick={() => setView('messages')}>Messages</button>
           <span className="spacer" />
           {result && (
@@ -528,7 +612,9 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
         )}
         <div className="result-body" style={resultsOpen ? undefined : { display: 'none' }}>
           <ErrorBoundary label="results grid" onReset={() => edits.reset()}>
-          {stacked && view !== 'messages' && result && result.results.length > 0 ? (
+          {view === 'compare' && compare ? (
+            <CompareView key={compare.sql + compare.ms} data={compare} onStatus={onStatus} />
+          ) : stacked && view !== 'messages' && result && result.results.length > 0 ? (
             <div className="stacked">
               {result.results.map((rs, i) => (
                 <div key={i} className="stacked-item"

@@ -50,7 +50,7 @@ export function App() {
   const [tabs, setTabs] = useState<TabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ConnectionConfig | 'new' | null>(null);
-  const [pwPrompt, setPwPrompt] = useState<{ conn: ConnectionConfig; needs: PromptNeeds } | null>(null);
+  const [pwPrompt, setPwPrompt] = useState<{ conn: ConnectionConfig; needs: PromptNeeds; quiet?: boolean } | null>(null);
   const [profiles, setProfiles] = useState<SshProfile[]>([]);
   const [profilesDialog, setProfilesDialog] = useState<{ selectId?: string } | null>(null);
   const reloadProfiles = useCallback(async () => { setProfiles(await unwrap(api.ssh.profiles())); }, []);
@@ -248,7 +248,8 @@ export function App() {
   }, []);
 
   // ---------- connect / disconnect ----------
-  async function connect(id: string, secrets?: Secrets) {
+  /** quiet: connect in the background (for ⇄ Compare): no new tab, the current tab stays in front. */
+  async function connect(id: string, secrets?: Secrets, quiet = false) {
     const conn = connById(id);
     if (!conn) return;
     if (!secrets) {
@@ -260,17 +261,17 @@ export function App() {
         db: conn.askPassword,
         ssh: sshAsk ? { auth: profile?.auth ?? conn.ssh.auth, user: profile?.user ?? conn.ssh.user, host: profile?.host ?? conn.ssh.host, profileName: profile?.name } : null,
       };
-      if (needs.db || needs.ssh) { setPwPrompt({ conn, needs }); return; }
+      if (needs.db || needs.ssh) { setPwPrompt({ conn, needs, quiet }); return; }
     }
     setConnecting((c) => ({ ...c, [id]: true }));
     setStatus(`Connecting to ${conn.name}…`);
     try {
       const info = await unwrap(api.session.connect(id, secrets));
       setSessions((s) => ({ ...s, [id]: info }));
-      setActiveConnId(id);
+      if (!quiet) setActiveConnId(id);
       setStatus(`Connected to ${conn.name}${info.readOnly ? ' (read-only)' : ''}`);
       await reloadConnections(); // host key fingerprint may have been stored
-      if (!tabs.some((t) => t.connId === id)) openTab(id);
+      if (!quiet && !tabs.some((t) => t.connId === id)) openTab(id);
     } catch (e) {
       const kind = e instanceof ApiError ? e.error.kind : 'unknown';
       const detail = e instanceof ApiError && e.error.detail && e.error.detail !== e.error.message ? `\n\nDetails: ${e.error.detail}` : '';
@@ -454,6 +455,9 @@ export function App() {
                   onHistoryChanged={() => setHistoryVersion((v) => v + 1)}
                   onShare={() => setShareFor(t.connId)}
                   shared={!!shares[t.connId]}
+                  connections={connections}
+                  sessions={sessions}
+                  onConnect={(id) => connect(id, undefined, true)}
                 />
               );
             })}
@@ -479,11 +483,15 @@ export function App() {
         <ConnectionDialog
           initial={editing === 'new' ? undefined : editing}
           profiles={profiles}
+          connections={connections}
           onManageProfiles={(selectId) => setProfilesDialog({ selectId })}
           onProfilesChanged={reloadProfiles}
           onClose={() => setEditing(null)}
           onSaved={async (c) => {
             setEditing(null);
+            // Pairing works both ways: DR gets "Compare with LP" too, unless it already has a partner.
+            const partner = c.compareWith ? connections.find((x) => x.id === c.compareWith) : undefined;
+            if (partner && !partner.compareWith) await api.connections.save({ ...partner, compareWith: c.id }, {}).catch(() => {});
             await reloadConnections();
             setActiveConnId(c.id);
             if (sessions[c.id]) setStatus('Saved. Disconnect and connect again to apply connection changes.');
@@ -497,7 +505,7 @@ export function App() {
       )}
       {pwPrompt && (
         <PasswordPrompt conn={pwPrompt.conn} needs={pwPrompt.needs} onCancel={() => setPwPrompt(null)}
-          onSubmit={(s) => { const id = pwPrompt.conn.id; setPwPrompt(null); connect(id, s); }} />
+          onSubmit={(s) => { const id = pwPrompt.conn.id; const q = !!pwPrompt.quiet; setPwPrompt(null); connect(id, s, q); }} />
       )}
       {sshPrompts[0] && (
         <SshPromptDialog key={sshPrompts[0].requestId} req={sshPrompts[0]} onAnswer={(a) => {
