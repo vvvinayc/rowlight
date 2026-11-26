@@ -4,6 +4,9 @@ import React, { useEffect, useReducer, useRef, useState } from 'react';
 import type { ConnectionConfig, QueryRunResult, ResultSet, SessionInfo } from '../../shared/types';
 import { api, ApiError, errorText, unwrap } from '../api';
 import { metaCache, subscribe as subscribeMeta } from '../metaCache';
+import { ParamsDialog } from './ParamsDialog';
+import { SaveQueryDialog } from './SavedQueries';
+import { findParams, fillParams } from '../../shared/sqlParams';
 import { formatEditor, minifyJsonInEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
 import { closestNames, fixBareStars, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
 import { parseTableRefs, baseName } from '../../shared/sqlAssist';
@@ -83,6 +86,26 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryRunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paramAsk, setParamAsk] = useState<{ names: string[]; resolve(v: Record<string, string> | null): void } | null>(null);
+  const [saving2, setSavingQuery] = useState<string | null>(null);
+  /** The selection, else the statement under the cursor, else the whole script. */
+  const queryForSave = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model) return '';
+    const sel = editor.getSelection();
+    if (sel && !sel.isEmpty()) return model.getValueInRange(sel);
+    const text = model.getValue();
+    const r = statementAt(smartStatements(text, { blankLines: smart().blankLineSplit, dialect: conn.type }), model.getOffsetAt(editor.getPosition() ?? { lineNumber: 1, column: 1 }));
+    return r ? text.slice(r.start, r.end) : text;
+  };
+  const saveQueryRef = useRef<() => void>(() => {});
+  saveQueryRef.current = () => {
+    const sql = queryForSave();
+    if (!sql.trim()) { onStatus('Nothing to save: write a query first'); return; }
+    setSavingQuery(sql);
+  };
+  const askParams = (names: string[]) => new Promise<Record<string, string> | null>((resolve) => setParamAsk({ names, resolve }));
   /** "Did you mean …?" for an unknown column / table in the last error. */
   const [fix, setFix] = useState<{ missing: MissingName; options: string[]; sql: string } | null>(null);
   const [view, setView] = useState<number | 'messages'>(0);
@@ -185,6 +208,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     // several tabs open the most recently created editor received them and the visible tab did not run.
     // addAction is scoped to this editor instance.
     editor.addAction({ id: 'rowlight.format', label: 'Format SQL', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF], run: () => doFormatRef.current() });
+    editor.addAction({ id: 'rowlight.saveQuery', label: '☆ Save this query (find it later with Ctrl+P)', contextMenuGroupId: '1_modification', contextMenuOrder: 1, run: () => saveQueryRef.current() });
     editor.addAction({ id: 'rowlight.jsonPretty', label: 'JSON: format (indent)', contextMenuGroupId: '1_modification', contextMenuOrder: 2, run: () => doFormatRef.current() });
     editor.addAction({ id: 'rowlight.jsonMinify', label: 'JSON: one line', contextMenuGroupId: '1_modification', contextMenuOrder: 3,
       run: () => { const err = minifyJsonInEditor(editor); if (err) setError(err); } });
@@ -273,6 +297,16 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
       flashRange(editor, model, r.start, r.end);
     } else sql = model.getValue();
     if (!sql.trim()) return;
+    // "where loan_id = :loan": ask for the values first.
+    if (smart().params) {
+      const names = findParams(sql);
+      if (names.length) {
+        const values = await askParams(names);
+        editor.focus();
+        if (!values) return;
+        sql = fillParams(sql, values);
+      }
+    }
     if (conn.type === 'mysql' && smart().blankLineSplit) sql = withSemicolons(sql, split(sql));
     // "a, b, *" is a syntax error in MySQL: send it as "a, b, lads.*"
     let starNote = '';
@@ -411,6 +445,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
 
   return (
     <div className="query-tab" style={{ display: active ? 'flex' : 'none' }}>
+      {saving2 !== null && <SaveQueryDialog sql={saving2} connName={conn.name} onStatus={onStatus} onClose={() => { setSavingQuery(null); editorRef.current?.focus(); }} />}
+      {paramAsk && <ParamsDialog names={paramAsk.names} onDone={(v) => { paramAsk.resolve(v); setParamAsk(null); }} />}
       <div className={'toolbar' + (connectionColor(conn.color) ? ' colored' : '')}
         style={{ ['--conn-color' as string]: connectionColor(conn.color) } as React.CSSProperties}>
         <button className="primary" onClick={() => run()} disabled={running || !connected}
@@ -419,6 +455,7 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
           <button onClick={() => run(undefined, 'script')} disabled={running || !connected} title="Run the whole script (Ctrl+Shift+Enter)">▶▶ Script</button>
         )}
         <button onClick={cancel} disabled={!running} title="Cancel the running query">■ Cancel</button>
+        <button onClick={() => saveQueryRef.current()} title="Save the query under the cursor (or the selection) with a name. Ctrl+P finds it again.">☆ Save</button>
         <button onClick={() => doFormatRef.current()} title="Format the selection, or the whole script (Ctrl+Shift+F)">Format</button>
         <label className="db-select">DB
           <select value={db} onChange={(e) => changeDb(e.target.value)} disabled={!connected || running}

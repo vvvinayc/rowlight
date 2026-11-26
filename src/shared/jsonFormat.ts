@@ -60,3 +60,42 @@ function layout(text: string, indent: string | null): string {
 
 export function prettyJson(text: string, indent = '  '): string { return layout(text.trim(), indent); }
 export function minifyJson(text: string): string { return layout(text.trim(), null); }
+
+/**
+ * Top-level keys of a JSON object with their values as text, exactly as written (655.00 stays "655.00").
+ * Strings are unquoted, null is null, nested objects / arrays stay as compact JSON. Not an object: null.
+ */
+export function jsonTopLevel(text: string): Record<string, string | null> | null {
+  const t = text.trim();
+  if (!t.startsWith('{')) return null;
+  const out: Record<string, string | null> = {};
+  let i = 1;
+  const ws = () => { while (i < t.length && /\s/.test(t[i])) i++; };
+  const str = () => { const s = i; i++; while (i < t.length && t[i] !== '"') i += t[i] === '\\' ? 2 : 1; i++; return t.slice(s, i); };
+  for (;;) {
+    ws();
+    if (i >= t.length || t[i] === '}') return out;
+    if (t[i] !== '"') return null;
+    let key: string;
+    try { key = JSON.parse(str()); } catch { return null; }
+    ws();
+    if (t[i] !== ':') return null;
+    i++; ws();
+    const s = i;
+    let depth = 0;
+    while (i < t.length) {
+      const ch = t[i];
+      if (ch === '"') { str(); continue; }
+      if (ch === '{' || ch === '[') depth++;
+      else if (ch === '}' || ch === ']') { if (depth === 0) break; depth--; }
+      else if (ch === ',' && depth === 0) break;
+      i++;
+    }
+    const raw = t.slice(s, i).trim();
+    if (raw === 'null') out[key] = null;
+    else if (raw.startsWith('"')) { try { out[key] = JSON.parse(raw); } catch { out[key] = raw; } }
+    else if (raw.startsWith('{') || raw.startsWith('[')) out[key] = minifyJson(raw);
+    else out[key] = raw;
+    if (t[i] === ',') i++;
+  }
+}

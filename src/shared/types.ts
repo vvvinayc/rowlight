@@ -93,6 +93,7 @@ export interface SmartSettings {
   runAtCursor: boolean;
   /** MySQL: a bare "*" after other columns is sent as "alias.*" (otherwise a syntax error). */
   fixStar: boolean;
+  params: boolean;
 }
 
 export type UpdateMode = 'auto' | 'notify' | 'off';

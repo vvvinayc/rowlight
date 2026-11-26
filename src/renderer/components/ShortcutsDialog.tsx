@@ -23,6 +23,8 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
     items: [
       ['Ctrl+Enter', 'Run the selection, or the statement under the cursor (it flashes). Setting off: the whole script', "Put the cursor anywhere inside a query: only that query runs. Queries are separated by ; or by an empty line. Select text to run just that."],
       ['Ctrl+Shift+Enter', 'Run the whole script (also the ▶▶ Script button)', "Every query in the tab runs, one after the other; each result gets its own tab."],
+      ['Ctrl+P', 'Saved queries: find one by typing a few words (also the ★ Saved button)', "Save a query with ☆ Save in the tab (or right-click → Save this query). Ctrl+P, type a few words, Enter opens it in a new tab, Ctrl+Enter opens and runs it."],
+      [':name in a query', 'Asks for the value when you run it', "Write where loan_id = :loan and run: a box asks for :loan. Numbers stay numbers, text gets quotes, 1,2,3 works for IN. The last value is remembered."],
       ['Ctrl+Shift+F', 'Format the selection, or the whole script (adds missing ";"). Pasted JSON is formatted as JSON', "Paste a JSON value into a tab and press Ctrl+Shift+F (or the Format button): one value per line, numbers kept exactly (655.00 stays 655.00). Right-click → JSON: one line puts it back on one line."],
       ['Ctrl+.', 'Quick fix on the underlined word, e.g. "Add ;"', "Click on the underlined word, press Ctrl+. and pick the fix from the menu."],
       ['F8 / Shift+F8', 'Go to the next / previous warning'],
@@ -87,7 +89,8 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
       ['Click / Shift+Click', 'Select a cell / extend the selection to here'],
       ['Arrow keys', 'Move between cells (scrolls sideways to hidden columns)'],
       ['Shift+Arrows', 'Extend the selection'],
-      ['Home / Shift+End', 'Select (and copy) the whole row: Home, then Shift+End, then Ctrl+C', "Click a cell in the row, press Home, then Shift+End. Shift+\u2193 adds the next rows. Ctrl+Shift+C copies with column names."],
+      ['Click a row number', 'Select the whole row, then Ctrl+C', "Shift+Click another row number or drag down the numbers for several rows. Click # (top left) to select everything."],
+      ['Home / Shift+End', 'Select the whole row with the keyboard: Home, then Shift+End, then Ctrl+C', "Click a cell in the row, press Home, then Shift+End. Shift+\u2193 adds the next rows. Ctrl+Shift+C copies with column names."],
       ['PageUp / PageDown', 'Move one page'],
       ['Home / End', 'First / last column'],
       ['Ctrl+Home / Ctrl+End', 'First / last cell (End of a limited result loads more rows)'],
@@ -101,6 +104,8 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
       ['Esc', 'While editing: cancel'],
       ['Double-click a cell', 'Open the full value (editable results: edit it). JSON values open formatted', "JSON is shown one value per line; \"As stored\" shows the raw text. Copy copies what you see."],
       ['Click a column name', 'Sort (click again: reverse, third click: off)'],
+      ['{} on a column name', 'JSON column: show each key as its own column', "Appears on columns holding JSON. The keys become columns (payload.UTR, payload.UDF20…) you can filter, sort, copy and export. Click {} again to hide them."],
+      ['Select several cells', 'Count, Sum, Avg, Min, Max below the grid', "Like Excel's status bar. Click a number there to copy it."],
     ],
   },
   {

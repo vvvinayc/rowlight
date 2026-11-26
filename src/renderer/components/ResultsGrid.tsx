@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorText, unwrap } from '../api';
 import type { GridEditApi, SqlKind } from './useRowEdits';
 import type { ChangeSet } from '../../shared/types';
-import { jsonError, looksLikeJson, prettyJson } from '../../shared/jsonFormat';
+import { jsonError, jsonTopLevel, looksLikeJson, prettyJson } from '../../shared/jsonFormat';
 
 const ROW_H = 24;
 const ROWNUM_W = 56;
@@ -51,19 +51,95 @@ function compare(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b), undefined, { numeric: true });
 }
 
-function initialWidths(columns: string[], rows: unknown[][]): number[] {
+function initialWidths(columns: string[], rowCount: number, get: (r: number, c: number) => unknown): number[] {
   return columns.map((name, c) => {
     let len = name.length + 2;
-    for (let r = 0; r < Math.min(rows.length, 200); r++) len = Math.max(len, display(rows[r][c]).length);
+    for (let r = 0; r < Math.min(rowCount, 200); r++) len = Math.max(len, display(get(r, c)).length);
     return Math.max(60, Math.min(360, len * 7.5 + 18));
   });
 }
 
-export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edit, canEdit, editNote, hasMore, loadingMore, pageSize, onLoadMore, onPreviewSql, onOpenSql }: Props) {
+/** A number in a cell (numbers, or text like "655.00"), for the totals bar. */
+function numberOf(v: unknown): { n: number; dec: number } | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? { n: v, dec: (String(v).split('.')[1] ?? '').length } : null;
+  if (typeof v === 'bigint') return { n: Number(v), dec: 0 };
+  if (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v.trim())) return { n: Number(v), dec: (v.trim().split('.')[1] ?? '').length };
+  return null;
+}
+
+/** JSON-object columns: detected from the first non-empty values. */
+function jsonColumns(columns: string[], rowCount: number, get: (r: number, c: number) => unknown): number[] {
+  const out: number[] = [];
+  for (let c = 0; c < columns.length; c++) {
+    let seen = 0, json = 0;
+    for (let r = 0; r < rowCount && seen < 20; r++) {
+      const v = get(r, c);
+      if (v === null || v === undefined || v === '') continue;
+      seen++;
+      if (typeof v === 'string' && v.trimStart().startsWith('{') && jsonTopLevel(v)) json++;
+      else if (typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)) json++;
+    }
+    if (seen && json === seen) out.push(c);
+  }
+  return out;
+}
+
+const asText = (v: unknown) => (typeof v === 'string' ? v : v !== null && typeof v === 'object' && !(v instanceof Date) ? JSON.stringify(v) : null);
+
+export function ResultsGrid(props: Props) {
+  const { columns: baseColumns, rows, resetKey, edit: editProp } = props;
+  const baseGet = (r: number, c: number) => (editProp ? editProp.value(r, c) : rows[r][c]);
+  const jsonCols = useMemo(() => jsonColumns(baseColumns, rows.length, baseGet),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseColumns, rows]);
+  const [expanded, setExpanded] = useState<number[]>([]);
+  useEffect(() => setExpanded([]), [baseColumns, resetKey]);
+
+  // JSON → columns: each key of the expanded JSON columns becomes its own column, right after it.
+  const derived = useMemo(() => {
+    const exp = expanded.filter((c) => jsonCols.includes(c));
+    if (!exp.length) return null;
+    const cache = new Map<number, Map<number, Record<string, string | null> | null>>();
+    const parsed = (r: number, c: number) => {
+      let m = cache.get(c);
+      if (!m) cache.set(c, (m = new Map()));
+      if (!m.has(r)) { const t = asText(baseGet(r, c)); m.set(r, t ? jsonTopLevel(t) : null); }
+      return m.get(r)!;
+    };
+    const cols: { name: string; base: number; get(r: number): unknown }[] = [];
+    baseColumns.forEach((name, c) => {
+      cols.push({ name, base: c, get: (r) => baseGet(r, c) });
+      if (!exp.includes(c)) return;
+      const keys: string[] = [];
+      for (let r = 0; r < Math.min(rows.length, 5000); r++) for (const k of Object.keys(parsed(r, c) ?? {})) if (!keys.includes(k)) keys.push(k);
+      for (const k of keys) cols.push({ name: `${name}.${k}`, base: -1, get: (r) => { const o = parsed(r, c); return o && k in o ? o[k] : null; } });
+    });
+    return cols;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, jsonCols, baseColumns, rows, editProp]);
+  const columns = useMemo(() => (derived ? derived.map((d) => d.name) : baseColumns), [derived, baseColumns]);
+  const toggleJson = (c: number) => setExpanded((e) => (e.includes(c) ? e.filter((x) => x !== c) : [...e, c]));
+  const baseIndex = (c: number) => (derived ? derived[c]?.base ?? -1 : c);
+  return <GridInner {...props} columns={columns} edit={derived ? undefined : editProp}
+    getCell={derived ? (r, c) => derived[c].get(r) : undefined}
+    jsonCols={jsonCols} expanded={expanded} baseIndex={baseIndex} onToggleJson={toggleJson}
+    editNote={derived ? 'JSON shown as columns: editing is off' : props.editNote} />;
+}
+
+interface InnerProps extends Props {
+  getCell?: (r: number, c: number) => unknown;
+  jsonCols: number[];
+  expanded: number[];
+  baseIndex(c: number): number;
+  onToggleJson(c: number): void;
+}
+
+function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdit, editNote, hasMore, loadingMore, pageSize, onLoadMore, onPreviewSql, onOpenSql, getCell, jsonCols, expanded, baseIndex, onToggleJson }: InnerProps) {
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filters, setFilters] = useState<string[]>(() => columns.map(() => ''));
   const [quick, setQuick] = useState('');
-  const [widths, setWidths] = useState<number[]>(() => initialWidths(columns, rows));
+  const val = (r: number, c: number) => (getCell ? getCell(r, c) : edit ? edit.value(r, c) : rows[r][c]);
+  const [widths, setWidths] = useState<number[]>(() => initialWidths(columns, rows.length, val));
   const [anchor, setAnchor] = useState<Cell | null>(null);
   const [focus, setFocus] = useState<Cell | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -74,14 +150,14 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const editable = !!edit && !!canEdit;
-  const val = (r: number, c: number) => (edit ? edit.value(r, c) : rows[r][c]);
+  const rowDrag = useRef(false);
 
   // Reset state when a new result arrives.
   useEffect(() => {
     setSort(null);
     setFilters(columns.map(() => ''));
     setQuick('');
-    setWidths(initialWidths(columns, rows));
+    setWidths(initialWidths(columns, rows.length, val));
     setAnchor(null);
     setFocus(null);
     setEditing(null);
@@ -116,7 +192,7 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
     }
     return idx;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, filters, quick, sort, edit]);
+  }, [rows, filters, quick, sort, edit, getCell]);
 
   const totalW = ROWNUM_W + widths.reduce((a, b) => a + b, 0);
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
@@ -314,6 +390,27 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
 
   const filtered = view.length !== rows.length;
 
+  // Totals bar: Count / Sum / Avg / Min / Max of the selected cells (like Excel's status bar).
+  const totals = useMemo(() => {
+    if (!sel) return null;
+    const cells = (sel.r2 - sel.r1 + 1) * (sel.c2 - sel.c1 + 1);
+    if (cells < 2 || cells > 2_000_000) return cells > 2_000_000 ? { cells, nums: 0, sum: 0, min: 0, max: 0, dec: 0, minDec: 0, maxDec: 0 } : null;
+    let nums = 0, sum = 0, min = Infinity, max = -Infinity, dec = 0, minDec = 0, maxDec = 0;
+    for (let r = sel.r1; r <= sel.r2; r++) {
+      for (let c = sel.c1; c <= sel.c2; c++) {
+        const x = numberOf(val(view[r], c));
+        if (!x) continue;
+        nums++; sum += x.n; dec = Math.max(dec, x.dec);
+        if (x.n < min) { min = x.n; minDec = x.dec; }
+        if (x.n > max) { max = x.n; maxDec = x.dec; }
+      }
+    }
+    return { cells, nums, sum, min, max, dec, minDec, maxDec };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel?.r1, sel?.r2, sel?.c1, sel?.c2, view, getCell, edit]);
+  const fmtNum = (n: number, dec: number) => n.toLocaleString(undefined, { minimumFractionDigits: Math.min(dec, 6), maximumFractionDigits: Math.max(Math.min(dec, 6), 0) });
+  const copyValue = async (label: string, text: string) => { await api.copyText(text); onStatus?.(`${label} copied: ${text}`); };
+
   return (
     <div className="grid-wrap">
       <div className="grid-toolbar">
@@ -355,9 +452,15 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
         <div style={{ width: totalW, minWidth: '100%' }}>
           <div className="grid-head">
             <div className="grid-row">
-              <div className="grid-cell rownum" style={{ width: ROWNUM_W }}>#</div>
+              <div className="grid-cell rownum clickable" style={{ width: ROWNUM_W }} title="Select all"
+                onClick={() => { if (view.length && columns.length) { setAnchor({ r: 0, c: 0 }); setFocus({ r: view.length - 1, c: columns.length - 1 }); scrollRef.current?.focus(); } }}>#</div>
               {columns.map((c, i) => (
                 <div key={i} className={'grid-cell head' + (editable && !edit!.isEditableCol(i) ? ' computed' : '')} style={{ width: widths[i] }} onClick={() => clickSort(i)} title={c}>
+                  {jsonCols.includes(baseIndex(i)) && (
+                    <button className={'json-cols' + (expanded.includes(baseIndex(i)) ? ' active' : '')}
+                      title={expanded.includes(baseIndex(i)) ? 'Hide the JSON key columns' : 'Show each JSON key as its own column (filter, sort, copy, export)'}
+                      onClick={(e) => { e.stopPropagation(); onToggleJson(baseIndex(i)); }}>{'{}'}</button>
+                  )}
                   <span className="head-name">{c}</span>
                   {sort?.col === i && <span className="sort">{sort.dir === 1 ? '▲' : '▼'}</span>}
                   <span className="resizer" onMouseDown={(e) => startResize(e, i)} onClick={(e) => e.stopPropagation()} />
@@ -388,7 +491,20 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
               const state = edit?.rowState(rowIdx);
               return (
                 <div key={r} className={'grid-row' + (r % 2 ? ' odd' : '') + (state ? ' ' + state : '')} style={{ position: 'absolute', top: r * ROW_H, height: ROW_H }}>
-                  <div className="grid-cell rownum" style={{ width: ROWNUM_W }}>{state === 'inserted' ? '+' : r + 1}</div>
+                  <div className="grid-cell rownum clickable" style={{ width: ROWNUM_W }} title="Click: select the row · Shift+Click / drag: several rows · then Ctrl+C"
+                    onMouseDown={(e) => {
+                      if (e.button !== 0 || !columns.length) return;
+                      e.preventDefault();
+                      scrollRef.current?.focus();
+                      const lastC = columns.length - 1;
+                      if (e.shiftKey && anchor) setAnchor({ r: anchor.r, c: 0 }); else setAnchor({ r, c: 0 });
+                      setFocus({ r, c: lastC });
+                      rowDrag.current = true;
+                      const up = () => { rowDrag.current = false; window.removeEventListener('mouseup', up); };
+                      window.addEventListener('mouseup', up);
+                    }}
+                    onMouseEnter={() => { if (rowDrag.current) setFocus({ r, c: columns.length - 1 }); }}
+                  >{state === 'inserted' ? '+' : r + 1}</div>
                   {columns.map((_, c) => {
                     if (editing && editing.r === r && editing.c === c) {
                       return (
@@ -435,6 +551,23 @@ export function ResultsGrid({ columns, rows, resetKey, exportName, onStatus, edi
           </div>
         </div>
       </div>
+      {totals && (
+        <div className="grid-totals" title="Click a number to copy it">
+          <span>Count <b>{totals.cells.toLocaleString()}</b></span>
+          {totals.nums > 0 && (() => {
+            const avgDec = Math.max(totals.dec, 2);
+            const items: [string, number, number][] = [['Sum', totals.sum, totals.dec], ['Avg', totals.sum / totals.nums, avgDec], ['Min', totals.min, totals.minDec], ['Max', totals.max, totals.maxDec]];
+            return <>
+              {totals.nums !== totals.cells && <span>Numbers <b>{totals.nums.toLocaleString()}</b></span>}
+              {items.map(([label, n, dec]) => {
+                const plain = n.toFixed(Math.min(dec, 6));
+                return <span key={label} className="clickable" onClick={() => copyValue(label, plain)}>{label} <b>{fmtNum(n, dec)}</b></span>;
+              })}
+            </>;
+          })()}
+          {totals.cells > 2_000_000 && <span className="muted">too many cells to add up</span>}
+        </div>
+      )}
       {generated && (
         <div className="modal-backdrop" onMouseDown={() => setGenerated(null)}>
           <div className="modal wide" onMouseDown={(e) => e.stopPropagation()}>

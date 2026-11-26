@@ -10,6 +10,7 @@ import { Sidebar } from './components/Sidebar';
 import { ConnectionDialog } from './components/ConnectionDialog';
 import { QueryTab, type EditorHandle, type TabState } from './components/QueryTab';
 import { HistoryPanel } from './components/HistoryPanel';
+import { SavedQueriesDialog } from './components/SavedQueries';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { invalidateUsage, setSmartSettings } from './smart';
 import { ConfirmDialog, PasswordPrompt, SettingsDialog, SshPromptDialog, type PromptNeeds } from './components/Dialogs';
@@ -60,6 +61,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   // Connections panel on the left: hide / show with the ☰ button or Ctrl+B (remembered).
   const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem('rowlight.sidebarOpen') !== '0'; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem('rowlight.sidebarOpen', sidebarOpen ? '1' : '0'); } catch { /* ignore */ } }, [sidebarOpen]);
@@ -234,6 +236,7 @@ export function App() {
       }
       if (!e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      if (k === 'p' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); setShowSaved((v) => !v); }
       if (k === 'b' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); setSidebarOpen((v) => !v); }
       if (k === 'e' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); shortcuts.current.newTab(); }
       if (k === 'w' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); shortcuts.current.closeTab(); }
@@ -364,6 +367,7 @@ export function App() {
         <button onClick={() => saveFile(false)} disabled={!activeTabId} title="Save to a .sql file (Ctrl+S, Ctrl+Shift+S = Save as)">Save</button>
         <button className={showHistory ? 'active' : ''} onClick={() => setShowHistory((v) => !v)}>History</button>
         <button onClick={() => setProfilesDialog({})} title="Saved SSH bastions shared by many connections">SSH profiles</button>
+        <button onClick={() => setShowSaved(true)} title="Saved queries: find one by typing a few words (Ctrl+P)">★ Saved</button>
         <button onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (F1)">⌨ Shortcuts</button>
         <button onClick={() => setShowSettings(true)}>Settings</button>
         <span className="spacer" />
@@ -532,6 +536,14 @@ export function App() {
           onDone={async (msg) => { setImportPreview(null); setStatus(msg); await reloadConnections(); }} />
       )}
       {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
+      {showSaved && (
+        <SavedQueriesDialog
+          connName={connById(currentConnId ?? null)?.name ?? null}
+          onClose={() => setShowSaved(false)}
+          onOpen={(q, run) => openTab(currentConnId ?? null, q.sql, run, q.name)}
+          onInsert={(q) => insertIntoEditor(q.sql)}
+        />
+      )}
       {showSettings && (
         <SettingsDialog settings={settings} theme={theme} onTheme={changeTheme} onCancel={() => setShowSettings(false)}
           onSave={async (s) => { const saved = await unwrap(api.settings.save(s)); setSmartSettings(saved); invalidateUsage(); setSettings(saved); setShowSettings(false); }} />
