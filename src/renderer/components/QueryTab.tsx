@@ -8,6 +8,7 @@ import { ParamsDialog } from './ParamsDialog';
 import { SaveQueryDialog } from './SavedQueries';
 import { CompareView, ComparePicker, type CompareData } from './CompareView';
 import { compareTables, isReadOnlyQuery } from '../../shared/compare';
+import { listPaste, pastedList, toSqlList } from '../../shared/pasteList';
 import { findParams, fillParams } from '../../shared/sqlParams';
 import { formatEditor, minifyJsonInEditor, monaco, registerEditorContext, statementsWithoutWhere, updateHints } from '../monacoSetup';
 import { closestNames, fixBareStars, parseMissingName, replaceName, smartStatements, statementAt, withSemicolons, type MissingName } from '../../shared/sqlSmart';
@@ -92,6 +93,8 @@ function flashRange(editor: monaco.editor.IStandaloneCodeEditor, model: monaco.e
 export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onToggleReadOnly, onRegister, onStatus, onHistoryChanged, onShare, shared, onTextChange, connections, sessions, onConnect }: Props) {
   const textChangeRef = useRef(onTextChange);
   textChangeRef.current = onTextChange;
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [db, setDb] = useState(session?.currentDatabase ?? conn.database);
@@ -228,6 +231,37 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
     editor.addAction({ id: 'rowlight.format', label: 'Format SQL', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF], run: () => doFormatRef.current() });
     editor.addAction({ id: 'rowlight.saveQuery', label: '☆ Save this query (find it later with Ctrl+P)', contextMenuGroupId: '1_modification', contextMenuOrder: 1, run: () => saveQueryRef.current() });
     editor.addAction({ id: 'rowlight.compare', label: '⇄ Compare with another connection…', contextMenuGroupId: '1_modification', contextMenuOrder: 1.5, run: () => setPicker(true) });
+    // Pasting a column of values after "IN (" or "=": quote them and make an IN list.
+    editor.onDidPaste((e) => {
+      if (!smart().pasteList) return;
+      const model = editor.getModel();
+      if (!model || e.range.isEmpty()) return;
+      const pasted = model.getValueInRange(e.range);
+      const start = model.getOffsetAt(e.range.getStartPosition());
+      const r = listPaste(model.getValue().slice(Math.max(0, start - 2000), start), pasted);
+      if (!r) return;
+      const from = model.getPositionAt(start - r.replaceBefore);
+      const range = new monaco.Range(from.lineNumber, from.column, e.range.endLineNumber, e.range.endColumn);
+      // "in (" + paste with no ")" after it yet: close the bracket too.
+      const after = model.getValue().slice(model.getOffsetAt(e.range.getEndPosition()), model.getOffsetAt(e.range.getEndPosition()) + 200);
+      const text = !r.text.trimStart().startsWith('(') && !r.text.includes(' in (') && !/^in \(|^not in \(/.test(r.text.trim()) && !/^\s*\)/.test(after) ? r.text + ')' : r.text;
+      editor.pushUndoStop();
+      editor.executeEdits('pasteList', [{ range, text, forceMoveMarkers: true }]);
+      editor.pushUndoStop();
+      onStatusRef.current(r.note + ' (Ctrl+Z: paste as it was)');
+    });
+    editor.addAction({ id: 'rowlight.quoteList', label: "Make a list: 'a', 'b', 'c'", contextMenuGroupId: '1_modification', contextMenuOrder: 1.8,
+      run: () => {
+        const model = editor.getModel();
+        const sel = editor.getSelection();
+        if (!model || !sel || sel.isEmpty()) { onStatusRef.current('Select the values first (one per line)'); return; }
+        const items = pastedList(model.getValueInRange(sel));
+        if (!items) { onStatusRef.current('The selection is not a list of values (one per line)'); return; }
+        editor.pushUndoStop();
+        editor.executeEdits('quoteList', [{ range: sel, text: toSqlList(items), forceMoveMarkers: true }]);
+        editor.pushUndoStop();
+        onStatusRef.current(`${items.length} values made into a list`);
+      } });
     editor.addAction({ id: 'rowlight.jsonPretty', label: 'JSON: format (indent)', contextMenuGroupId: '1_modification', contextMenuOrder: 2, run: () => doFormatRef.current() });
     editor.addAction({ id: 'rowlight.jsonMinify', label: 'JSON: one line', contextMenuGroupId: '1_modification', contextMenuOrder: 3,
       run: () => { const err = minifyJsonInEditor(editor); if (err) setError(err); } });

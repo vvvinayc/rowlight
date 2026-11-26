@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { sqlLiteral } from '../../shared/sqlParams';
+import { pastedList, toSqlList } from '../../shared/pasteList';
 
 const KEY = 'rowlight.paramValues';
 
@@ -30,13 +31,20 @@ export function ParamsDialog({ names, onDone }: { names: string[]; onDone(values
               <tr key={n}>
                 <td className="param-name">:{n}</td>
                 <td><input autoFocus={i === 0} value={values[n]} onFocus={(e) => e.target.select()}
+                  onPaste={(e) => {
+                    // A pasted column of values becomes 'a', 'b', 'c' (for IN (:ids)).
+                    const items = pastedList(e.clipboardData.getData('text'));
+                    if (!items) return;
+                    e.preventDefault();
+                    setValues((v) => ({ ...v, [n]: toSqlList(items).replace(/\s*\n\s*/g, ' ').trim() }));
+                  }}
                   onChange={(e) => setValues((v) => ({ ...v, [n]: e.target.value }))} /></td>
                 <td className="muted small param-sql">{values[n].trim() ? sqlLiteral(values[n]) : ''}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="muted small">Numbers and NULL are used as they are; text gets quotes. For IN, type 1,2,3 or ('A','B').</div>
+        <div className="muted small">Numbers and NULL are used as they are; text gets quotes. For IN, type 1,2,3 or paste a column of values (they get quotes).</div>
         <div className="modal-actions">
           <span className="spacer" />
           <button type="button" onClick={() => onDone(null)}>Cancel</button>

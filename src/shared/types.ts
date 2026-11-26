@@ -96,6 +96,7 @@ export interface SmartSettings {
   /** MySQL: a bare "*" after other columns is sent as "alias.*" (otherwise a syntax error). */
   fixStar: boolean;
   params: boolean;
+  pasteList: boolean;
 }
 
 export type UpdateMode = 'auto' | 'notify' | 'off';
