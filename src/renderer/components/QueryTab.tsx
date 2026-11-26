@@ -15,7 +15,7 @@ import { closestNames, fixBareStars, parseMissingName, replaceName, smartStateme
 import { parseTableRefs, baseName } from '../../shared/sqlAssist';
 import { smart } from '../smart';
 import { editorTheme } from '../theme';
-import { connectionColor } from '../../shared/defaults';
+import { colorOf } from '../../shared/defaults';
 import { ResultsGrid } from './ResultsGrid';
 import { useRowEdits } from './useRowEdits';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -591,8 +591,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
         onClose={() => { setPicker(false); editorRef.current?.focus(); }}
         onPick={(id) => { setPicker(false); runCompareRef.current(id); }} />}
       {paramAsk && <ParamsDialog names={paramAsk.names} textNames={paramAsk.textNames} onDone={(v) => { paramAsk.resolve(v); setParamAsk(null); }} />}
-      <div className={'toolbar' + (connectionColor(conn.color) ? ' colored' : '')}
-        style={{ ['--conn-color' as string]: connectionColor(conn.color) } as React.CSSProperties}>
+      <div className={'toolbar' + (colorOf(conn) ? ' colored' : '')}
+        style={{ ['--conn-color' as string]: colorOf(conn) } as React.CSSProperties}>
         <button className="primary" onClick={() => run()} disabled={running || !connected}
           title={smart().runAtCursor ? 'Run the selection, or the statement under the cursor (Ctrl+Enter)' : 'Run the selection, or the whole script (Ctrl+Enter)'}>▶ Run</button>
         {smart().runAtCursor && (

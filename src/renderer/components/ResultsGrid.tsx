@@ -138,6 +138,9 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filters, setFilters] = useState<string[]>(() => columns.map(() => ''));
   const [quick, setQuick] = useState('');
+  /** Right-click → Filter = value / Exclude value (exact match, NULL included). */
+  const [valueFilters, setValueFilters] = useState<{ c: number; value: string | null; neg: boolean }[]>([]);
+  const [menu, setMenu] = useState<{ x: number; y: number; r: number; c: number } | null>(null);
   const val = (r: number, c: number) => (getCell ? getCell(r, c) : edit ? edit.value(r, c) : rows[r][c]);
   const [widths, setWidths] = useState<number[]>(() => initialWidths(columns, rows.length, val));
   const [anchor, setAnchor] = useState<Cell | null>(null);
@@ -157,6 +160,8 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
     setSort(null);
     setFilters(columns.map(() => ''));
     setQuick('');
+    setValueFilters([]);
+    setMenu(null);
     setWidths(initialWidths(columns, rows.length, val));
     setAnchor(null);
     setFocus(null);
@@ -184,6 +189,11 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
         if (!display(val(r, c)).toLowerCase().includes(f)) { ok = false; break; }
       }
       if (ok && q) ok = columns.some((_, c) => display(val(r, c)).toLowerCase().includes(q));
+      if (ok) for (const f of valueFilters) {
+        const v = val(r, f.c);
+        const same = f.value === null ? v === null || v === undefined : v !== null && v !== undefined && display(v) === f.value;
+        if (same === f.neg) { ok = false; break; }
+      }
       if (ok) idx.push(r);
     }
     if (sort) {
@@ -192,7 +202,7 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
     }
     return idx;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, filters, quick, sort, edit, getCell]);
+  }, [rows, filters, quick, sort, edit, getCell, valueFilters]);
 
   const totalW = ROWNUM_W + widths.reduce((a, b) => a + b, 0);
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
@@ -416,8 +426,14 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
       <div className="grid-toolbar">
         <input className="grid-quick" placeholder="Filter all columns…" value={quick} onChange={(e) => setQuick(e.target.value)} />
         <span className="muted">{filtered ? `${view.length.toLocaleString()} of ${rows.length.toLocaleString()} rows` : `${rows.length.toLocaleString()} rows`}</span>
+        {valueFilters.map((f, i) => (
+          <span key={i} className={'value-chip' + (f.neg ? ' neg' : '')} title="Right-click a cell to add more">
+            {columns[f.c]} {f.neg ? (f.value === null ? 'is not NULL' : '≠') : (f.value === null ? 'is NULL' : '=')} {f.value === null ? '' : f.value.length > 24 ? f.value.slice(0, 24) + '…' : f.value}
+            <button title="Remove this filter" onClick={() => setValueFilters((v) => v.filter((_, j) => j !== i))}>×</button>
+          </span>
+        ))}
         {(filtered || sort) && (
-          <button className="link" onClick={() => { setFilters(columns.map(() => '')); setQuick(''); setSort(null); }}>Clear filters/sort</button>
+          <button className="link" onClick={() => { setFilters(columns.map(() => '')); setQuick(''); setSort(null); setValueFilters([]); }}>Clear filters/sort</button>
         )}
         {editable && (
           <>
@@ -542,6 +558,11 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
                         }}
                         onMouseEnter={() => { if (dragging.current) setFocus({ r, c }); }}
                         onDoubleClick={() => { if (!beginEdit(r, c)) setViewer({ col: columns[c], value: text }); }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          if (!isSel(r, c)) { setAnchor({ r, c }); setFocus({ r, c }); }
+                          setMenu({ x: e.clientX, y: e.clientY, r, c });
+                        }}
                       >{text.length > 300 ? text.slice(0, 300) + '…' : text}</div>
                     );
                   })}
@@ -551,6 +572,34 @@ function GridInner({ columns, rows, resetKey, exportName, onStatus, edit, canEdi
           </div>
         </div>
       </div>
+      {menu && (() => {
+        const v = val(view[menu.r], menu.c);
+        const isNull = v === null || v === undefined;
+        const shown = isNull ? 'NULL' : display(v);
+        const short = shown.length > 30 ? shown.slice(0, 30) + '…' : shown;
+        const col = columns[menu.c];
+        const plainCol = /^[A-Za-z_][\w$]*$/.test(col) ? col : '`' + col.replace(/`/g, '``') + '`';
+        // Numbers from number columns without quotes; everything else quoted (also safe for VARCHAR ids like '2705820').
+        const literal = isNull ? null : typeof v === 'number' || typeof v === 'bigint' ? String(v) : "'" + shown.replace(/'/g, "''") + "'";
+        const cond = isNull ? `${plainCol} IS NULL` : `${plainCol} = ${literal}`;
+        const add = (neg: boolean) => { setValueFilters((f) => [...f, { c: menu.c, value: isNull ? null : shown, neg }]); setMenu(null); };
+        const item = (label: React.ReactNode, act: () => void, title?: string) => (
+          <button className="ctx-item" title={title} onMouseDown={(e) => e.preventDefault()} onClick={act}>{label}</button>
+        );
+        return (
+          <div className="ctx-backdrop" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
+            <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 300), top: Math.min(menu.y, window.innerHeight - 220) }} onMouseDown={(e) => e.stopPropagation()}>
+              {item(<>Filter: <b>{col}</b> {isNull ? 'is NULL' : '='} <code>{isNull ? '' : short}</code></>, () => add(false), 'Show only rows with this value')}
+              {item(<>Exclude: <b>{col}</b> {isNull ? 'is not NULL' : '≠'} <code>{isNull ? '' : short}</code></>, () => add(true), 'Hide rows with this value')}
+              <div className="ctx-sep" />
+              {item('Copy value', async () => { setMenu(null); await api.copyText(isNull ? '' : shown); onStatus?.('Value copied'); })}
+              {item(<>Copy as condition <code>{cond.length > 34 ? cond.slice(0, 34) + '…' : cond}</code></>, async () => { setMenu(null); await api.copyText(cond); onStatus?.('Copied: ' + cond); }, 'For a WHERE clause')}
+              {sel && (sel.r1 !== sel.r2 || sel.c1 !== sel.c2) && item('Copy selected cells (Ctrl+C)', () => { setMenu(null); copy(false); })}
+              {valueFilters.length > 0 && <><div className="ctx-sep" />{item('Remove value filters', () => { setValueFilters([]); setMenu(null); })}</>}
+            </div>
+          </div>
+        );
+      })()}
       {totals && (
         <div className="grid-totals" title="Click a number to copy it">
           <span>Count <b>{totals.cells.toLocaleString()}</b></span>

@@ -223,9 +223,19 @@ export interface UsageStats {
   columns: Map<string, number>;
   /** "tableA|tableB" (sorted, lower case) → condition key → count */
   joins: Map<string, Map<string, { join: LearnedJoin; count: number }>>;
+  /** table (lower case, without db) → alias you wrote → count */
+  aliases: Map<string, Map<string, number>>;
 }
 
-export const emptyStats = (): UsageStats => ({ tables: new Map(), columns: new Map(), joins: new Map() });
+export const emptyStats = (): UsageStats => ({ tables: new Map(), columns: new Map(), joins: new Map(), aliases: new Map() });
+
+/** The alias you use most for this table (e.g. "la" for loan_accounts), unless it is already taken in this query. */
+export function learnedAlias(stats: UsageStats | null | undefined, table: string, taken: Iterable<string>): string | undefined {
+  const m = stats?.aliases?.get(baseName(table).toLowerCase());
+  if (!m) return undefined;
+  const used = new Set([...taken].map((x) => x.toLowerCase()));
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([a]) => a).find((a) => !used.has(a.toLowerCase()));
+}
 
 const bump = (m: Map<string, number>, k: string, by = 1) => m.set(k, (m.get(k) ?? 0) + by);
 
@@ -238,6 +248,13 @@ export function learnFromSql(stats: UsageStats, sql: string, defaultDb: string, 
   for (const r of refs) {
     byQ.set(r.qualifier.toLowerCase(), r);
     bump(stats.tables, (r.db + '.' + baseName(r.table)).toLowerCase());
+    if (r.alias && /^[A-Za-z_][\w$]*$/.test(r.alias)) {
+      if (!stats.aliases) stats.aliases = new Map();
+      const t = baseName(r.table).toLowerCase();
+      const m = stats.aliases.get(t) ?? new Map<string, number>();
+      bump(m, r.alias);
+      stats.aliases.set(t, m);
+    }
   }
   const tableOf = (q: string) => byQ.get(q.toLowerCase());
   // qualified columns: la.customer_id

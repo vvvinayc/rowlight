@@ -80,6 +80,8 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 - **Format SQL** (Ctrl+Shift+F) for MySQL and T-SQL. Pasted **JSON** is formatted as JSON (values kept exactly as written,
   `655.00` stays `655.00`); right-click → *JSON: one line* puts it back on one line.
 - **Click a row number** to select the whole row (Shift+Click or drag for several rows, **#** for everything), then Ctrl+C.
+- **Right-click a cell:** *Filter = this value*, *Exclude this value* (chips above the grid, × removes one), *Copy value*,
+  *Copy as condition* (`loan_id = '2705820'`).
 - **Totals bar:** select several cells and the bar below the grid shows Count, Sum, Avg, Min and Max (click one to copy it).
 - **JSON → columns:** a **{}** button appears on columns that hold JSON; it shows each key as its own column
   (`payload.UTR`, `payload.UDF20`…) to filter, sort, copy and export. Values are kept exactly as stored.
@@ -95,6 +97,10 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 - **Saved queries:** **☆ Save** in the tab (or right-click → *Save this query*) saves the query under the cursor with a
   name. **Ctrl+P** (or **★ Saved**) finds it by a few words: Enter opens it in a new tab, Ctrl+Enter opens and runs it.
 - **JSON cells:** double-click a cell holding JSON and it opens formatted (*As stored* shows the raw text).
+- **Tab colours are automatic** from the connection name: PROD red, DR orange, UAT / staging yellow, dev green
+  (✎ Edit → Colour: *A* = automatic, *∅* = none, or pick one).
+- **Your aliases:** after FROM / JOIN a table is suggested with the alias you usually write for it (learned from the
+  queries you run), e.g. `loan_accounts lac`.
 - **Several connections side by side:** click a connection on the left (or its **SQL** button) to go to its tab, or open
   one. Ctrl+E then opens more tabs for that connection.
 - Multiple tabs (**Ctrl+E**), **open / save `.sql` files** (Ctrl+O / Ctrl+S), and tabs **restored** after a restart.

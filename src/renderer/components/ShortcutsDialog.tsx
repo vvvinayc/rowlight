@@ -8,6 +8,7 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
     items: [
       ['Ctrl+E', 'New query tab for the connection of the current tab'],
       ['Click a connection on the left', 'Go to its tab (opens one if it has none)', "To work on two connections side by side (e.g. LP Production and DR): click DR on the left, or its SQL button, and you get a DR tab next to the LP one. Ctrl+E then opens more DR tabs. Give each connection a colour (✎ Edit → Colour) to tell the tabs apart."],
+      ['Tab colours', 'Automatic: PROD red, DR orange, UAT / staging yellow, dev green', "Comes from the connection name. To choose another colour, or none: ✎ Edit the connection → Colour (A = automatic, ∅ = no colour)."],
       ['Ctrl+W', 'Close the current tab'],
       ['Middle-click a tab', 'Close that tab'],
       ['Ctrl+O', 'Open a .sql file'],
@@ -36,6 +37,7 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
     title: 'Suggestions',
     items: [
       ['Ctrl+Space', 'Show suggestions (tables, columns, joins, functions, snippets)', "After FROM: tables; after \"la.\": columns; after JOIN \u2026 ON: join conditions. Type sel, cnt or dup and press Tab for a ready query."],
+      ['FROM / JOIN + table', 'The table comes with the alias you usually use for it (e.g. loan_accounts la)', "Rowlight learns your aliases from the queries you run; the suggestion says \"alias la (yours)\". New tables get an alias from their name."],
       ['Tab / Enter', 'Accept the highlighted suggestion'],
       ['Esc', 'Close the suggestion list'],
       ['Ctrl+Shift+Space', 'Show the parameters of the function'],
@@ -71,6 +73,7 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
       ['Ctrl+/', 'Comment / uncomment the line'],
       ['Shift+Alt+A', 'Block comment /* … */'],
       ['Ctrl+Backspace / Ctrl+Delete', 'Delete the word before / after'],
+      ['Ctrl+Shift+[ / Ctrl+Shift+]', 'Fold / unfold the block (long queries)'],
     ],
   },
   {
@@ -105,9 +108,21 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
       ['Tab / Shift+Tab', 'While editing: save and move right / left'],
       ['Esc', 'While editing: cancel'],
       ['Double-click a cell', 'Open the full value (editable results: edit it). JSON values open formatted', "JSON is shown one value per line; \"As stored\" shows the raw text. Copy copies what you see."],
+      ['Right-click a cell', 'Filter = this value, Exclude this value, Copy value, Copy as condition', "Filter keeps only rows with that value (Exclude hides them); each filter shows as a chip above the grid with × to remove it. Copy as condition gives loan_id = '2705820' for a WHERE clause."],
       ['Click a column name', 'Sort (click again: reverse, third click: off)'],
       ['{} on a column name', 'JSON column: show each key as its own column', "Appears on columns holding JSON. The keys become columns (payload.UTR, payload.UDF20…) you can filter, sort, copy and export. Click {} again to hide them."],
       ['Select several cells', 'Count, Sum, Avg, Min, Max below the grid', "Like Excel's status bar. Click a number there to copy it."],
+    ],
+  },
+  {
+    title: 'Right-click menu in the editor',
+    items: [
+      ['☆ Save this query', 'Save the query under the cursor with a name (also the ☆ Save button)', "Find it again with Ctrl+P."],
+      ['⇄ Compare with another connection…', 'Run the query on two connections and show the differences'],
+      ["Make a list: 'a', 'b', 'c'", 'Turn the selected lines (one value per line) into a quoted list', "For IN (…). Pasting such a list after IN ( or = does this automatically."],
+      ['JSON: format (indent)', 'Lay out JSON one value per line (same as Ctrl+Shift+F on JSON)'],
+      ['JSON: one line', 'Put JSON back on one line'],
+      ['Format Document', 'Format the whole script (Ctrl+Shift+F)'],
     ],
   },
   {

@@ -40,7 +40,18 @@ export function connectionColor(name?: string): string | undefined {
   return name ? CONNECTION_COLORS[name] : undefined;
 }
 
-/** New prod / DR connections start red, like the read-only default. */
+/** Automatic colour from the name: UAT / staging yellow, PROD red, DR orange, dev / local green. */
 export function defaultColorForName(name: string): string | undefined {
-  return defaultReadOnlyForName(name) ? 'red' : undefined;
+  const n = name.toLowerCase();
+  if (/\b(uat|stag(e|ing)?|qa|test|sit)\b/.test(n)) return 'yellow';
+  if (/prod/.test(n)) return 'red';
+  if (/\bdr\b|disaster/.test(n)) return 'orange';
+  if (/\b(dev|local|localhost)\b/.test(n)) return 'green';
+  return undefined;
+}
+
+/** Colour shown for a connection: the one picked, "none" = no colour, not set = automatic from the name. */
+export function colorOf(conn: { color?: string; name: string } | undefined): string | undefined {
+  if (!conn || conn.color === 'none') return undefined;
+  return connectionColor(conn.color ?? defaultColorForName(conn.name));
 }

@@ -39,7 +39,7 @@ export function ConnectionDialog({ initial, profiles, connections = [], onManage
   const saved = initial?.hasSaved;
 
   function onName(name: string) {
-    set(readOnlyTouched ? { name } : { name, readOnly: defaultReadOnlyForName(name), color: defaultColorForName(name) });
+    set(readOnlyTouched ? { name } : { name, readOnly: defaultReadOnlyForName(name) });
   }
 
   function validate(): string | null {
@@ -156,12 +156,14 @@ export function ConnectionDialog({ initial, profiles, connections = [], onManage
 
           <div className="color-row">
             <span className="muted small">Colour</span>
-            <button type="button" className={'swatch none' + (!c.color ? ' picked' : '')} title="No colour" onClick={() => set({ color: undefined })}>∅</button>
+            <button type="button" className={'swatch auto' + (!c.color ? ' picked' : '')} title={`Automatic from the name${defaultColorForName(c.name) ? ': ' + defaultColorForName(c.name) : ' (none for this name)'}`}
+              onClick={() => set({ color: undefined })}>A</button>
+            <button type="button" className={'swatch none' + (c.color === 'none' ? ' picked' : '')} title="No colour" onClick={() => set({ color: 'none' })}>∅</button>
             {Object.entries(CONNECTION_COLORS).map(([name, hex]) => (
-              <button type="button" key={name} title={name} className={'swatch' + (c.color === name ? ' picked' : '')}
+              <button type="button" key={name} title={name} className={'swatch' + ((c.color ?? defaultColorForName(c.name)) === name ? ' picked' : '') + (!c.color ? ' auto-picked' : '')}
                 style={{ background: hex }} onClick={() => set({ color: name })} />
             ))}
-            <span className="muted small">shown on tabs and the toolbar (tip: red for prod / DR)</span>
+            <span className="muted small">{c.color ? 'shown on tabs and the toolbar' : 'A = automatic: PROD red, DR orange, UAT / staging yellow, dev green'}</span>
           </div>
 
           <div className="row2">

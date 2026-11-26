@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConnectionConfig, McpShareInfo, Secrets, SessionInfo, Settings, SshProfile, SshPromptRequest } from '../shared/types';
-import { connectionColor, defaultReadOnlyForName, DEFAULT_SELECT_LIMIT } from '../shared/defaults';
+import { colorOf, defaultReadOnlyForName, DEFAULT_SELECT_LIMIT } from '../shared/defaults';
 import { getThemePref, setThemePref, type ThemePref } from './theme';
 import { api, ApiError, errorText, unwrap } from './api';
 import { metaCache } from './metaCache';
@@ -418,7 +418,7 @@ export function App() {
               const ro = sessions[t.connId]?.readOnly ?? conn?.readOnly;
               return (
                 <div key={t.id} className={'tab' + (t.id === activeTabId ? ' active' : '') + (ro ? '' : ' writable')}
-                  style={connectionColor(conn?.color) ? { borderTop: `3px solid ${connectionColor(conn?.color)}` } : undefined}
+                  style={colorOf(conn) ? { borderTop: `3px solid ${colorOf(conn)}` } : undefined}
                   onClick={() => { setActiveTabId(t.id); setActiveConnId(t.connId); }}
                   onAuxClick={(e) => e.button === 1 && closeTab(t.id)}>
                   <span className={'dot ' + (sessions[t.connId] ? 'on' : 'off')} />

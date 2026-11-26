@@ -2,7 +2,7 @@
 
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import type { ConnectionConfig, SessionInfo } from '../../shared/types';
-import { connectionColor } from '../../shared/defaults';
+import { colorOf } from '../../shared/defaults';
 import { errorText } from '../api';
 import { metaCache, subscribe } from '../metaCache';
 
@@ -96,7 +96,7 @@ export function Sidebar(p: Props) {
           return (
             <div key={c.id}>
               <div className={'node conn' + (p.activeConnId === c.id ? ' active' : '')}
-                style={{ boxShadow: connectionColor(c.color) ? `inset 4px 0 0 ${connectionColor(c.color)}` : undefined }}
+                style={{ boxShadow: colorOf(c) ? `inset 4px 0 0 ${colorOf(c)}` : undefined }}
                 onClick={() => { p.onSelect(c.id); if (s) toggle(ckey); }}
                 onDoubleClick={() => !s && p.onConnect(c.id)}>
                 <span className={'dot ' + (s ? 'on' : p.connecting[c.id] ? 'busy' : 'off')} />

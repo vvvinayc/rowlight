@@ -17,7 +17,7 @@ import { jsonError, looksLikeJson, minifyJson, prettyJson } from '../shared/json
 import { metaCache } from './metaCache';
 import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType, TableInfo } from '../shared/types';
-import { clauseAt, functionsFor, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, bareStarFixes, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
+import { clauseAt, functionsFor, learnedAlias, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, bareStarFixes, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
 import { rankKey, smart, usageFor } from './smart';
 
 (self as any).MonacoEnvironment = {
@@ -125,7 +125,7 @@ const provider: monaco.languages.CompletionItemProvider = {
         if (dbs.some((d) => d.toLowerCase() === qualifier.toLowerCase())) {
           const taken = refs.map((r) => r.qualifier);
           for (const t of await metaCache.tables(ctx.connectionId, qualifier)) {
-            const alias = isTablePosition(textBefore.slice(0, -(qualifier.length + 1))) ? makeAlias(t.name, taken) : '';
+            const alias = isTablePosition(textBefore.slice(0, -(qualifier.length + 1))) ? (learnedAlias(stats, t.name, taken) ?? makeAlias(t.name, taken)) : '';
             suggestions.push({ label: t.name, kind: K.Struct, detail: alias ? 'alias ' + alias : undefined, insertText: alias ? t.name + ' ' + alias : t.name, range, sortText: tableRank(qualifier, t.name) + t.name });
           }
           return { suggestions };
@@ -145,12 +145,13 @@ const provider: monaco.languages.CompletionItemProvider = {
       if (isTablePosition(textBefore)) {
         const taken = refs.map((r) => r.qualifier);
         const tableItem = (d: string, t: TableInfo, label: string, group: string): monaco.languages.CompletionItem => {
-          const alias = makeAlias(t.name, taken);
+          const mine = learnedAlias(stats, t.name, taken);
+          const alias = mine ?? makeAlias(t.name, taken);
           const n = used(d, t.name);
           return {
             label: { label, description: alias },
             kind: t.kind === 'view' ? K.Interface : K.Struct,
-            detail: (t.kind === 'view' ? 'view' : 'table') + ' · alias ' + alias + (n ? ` · used ${n}×` : '') + (t.rows ? ` · ~${t.rows.toLocaleString()} rows` : ''),
+            detail: (t.kind === 'view' ? 'view' : 'table') + ' · alias ' + alias + (mine ? ' (yours)' : '') + (n ? ` · used ${n}×` : '') + (t.rows ? ` · ~${t.rows.toLocaleString()} rows` : ''),
             insertText: label + ' ' + alias,
             filterText: label === t.name ? t.name : label + ' ' + t.name,
             range,
