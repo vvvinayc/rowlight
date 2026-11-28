@@ -99,6 +99,11 @@ features of a desktop SQL client, plus guard rails so a stray `DELETE` never rea
 - **JSON cells:** double-click a cell holding JSON and it opens formatted (*As stored* shows the raw text).
 - **Tab colours are automatic** from the connection name: PROD red, DR orange, UAT / staging yellow, dev green
   (✎ Edit → Colour: *A* = automatic, *∅* = none, or pick one).
+- **Other databases in suggestions:** after FROM / JOIN, database names and the tables of every database are
+  suggested (`encoredb.loan l`), not only the selected one; `encoredb.` lists that database's tables.
+- **Wrong alias warning:** `la.account_number` in a statement that has no `la` gets a warning underline (an alias
+  copied from another query).
+- **Results are Stacked by default** (one below the other, like SSMS); switch to Tabs with the button, it is remembered.
 - **Your aliases:** after FROM / JOIN a table is suggested with the alias you usually write for it (learned from the
   queries you run), e.g. `loan_accounts lac`.
 - **Several connections side by side:** click a connection on the left (or its **SQL** button) to go to its tab, or open

@@ -650,3 +650,30 @@ export function lintSql(text: string, defaultDb: string, type: DbType): SqlHint[
   }
   return hints;
 }
+
+export interface UnknownQualifier { name: string; start: number; end: number }
+
+/**
+ * "la.account_number" where "la" is not a table or alias of this statement (MySQL): usually an alias copied from
+ * another query. Derived tables "( … ) x", CTE names and databases (also `knownDbs`) count as known.
+ */
+export function unknownQualifiers(text: string, defaultDb: string, knownDbs: string[] = []): UnknownQualifier[] {
+  const masked = maskSql(text);
+  const out: UnknownQualifier[] = [];
+  for (const { start: a, end: b } of smartStatements(text, { blankLines: true, dialect: 'mysql' })) {
+    const stmt = masked.slice(a, b);
+    const refs = parseTableRefs(stmt, defaultDb, 'mysql');
+    if (!refs.length) continue;
+    const known = new Set<string>(knownDbs.map((d) => d.toLowerCase()));
+    for (const r of refs) { known.add(r.qualifier.toLowerCase()); known.add(baseName(r.table).toLowerCase()); known.add(r.db.toLowerCase()); }
+    for (const m of stmt.matchAll(/\)\s*(?:AS\s+)?([A-Za-z_][\w$]*)/gi)) known.add(m[1].toLowerCase());
+    for (const m of stmt.matchAll(/(?:\bWITH\s+(?:RECURSIVE\s+)?|,\s*)([A-Za-z_][\w$]*)\s+AS\s*\(/gi)) known.add(m[1].toLowerCase());
+    for (const m of stmt.matchAll(/(^|[^\w$.`])([A-Za-z_][\w$]*)\.(?=[A-Za-z_*`])/g)) {
+      const name = m[2];
+      if (known.has(name.toLowerCase())) continue;
+      const at = (m.index ?? 0) + m[1].length;
+      out.push({ name, start: a + at, end: a + at + name.length });
+    }
+  }
+  return out;
+}

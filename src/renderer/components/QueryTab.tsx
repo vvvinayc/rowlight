@@ -155,7 +155,8 @@ export function QueryTab({ tab, active, conn, session, onNewTab, onOpenSql, onTo
   const activeRef = useRef(active);
   activeRef.current = active;
   const [layout, setLayout] = useState<ResultLayout>(() => {
-    try { return localStorage.getItem(LAYOUT_KEY) === 'stacked' ? 'stacked' : 'tabs'; } catch { return 'tabs'; }
+    // Stacked (one result below the other, like SSMS) unless the user picked Tabs.
+    try { return localStorage.getItem(LAYOUT_KEY) === 'tabs' ? 'tabs' : 'stacked'; } catch { return 'stacked'; }
   });
   const runRef = useRef<(rerunSql?: string, mode?: RunMode) => void>(() => {});
   const doFormatRef = useRef<() => void>(() => {});

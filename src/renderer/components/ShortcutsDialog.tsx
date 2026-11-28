@@ -37,6 +37,7 @@ const GROUPS: { title: string; items: [keys: string, what: string, how?: string]
     title: 'Suggestions',
     items: [
       ['Ctrl+Space', 'Show suggestions (tables, columns, joins, functions, snippets)', "After FROM: tables; after \"la.\": columns; after JOIN \u2026 ON: join conditions. Type sel, cnt or dup and press Tab for a ready query."],
+      ['FROM / JOIN + database.', 'Tables of any database: type encoredb. (or part of a table name, e.g. loan_od)', "Database names are suggested too; picking one inserts encoredb. and lists its tables. Tables of other databases appear as encoredb.loan l, after the selected database's own tables."],
       ['FROM / JOIN + table', 'The table comes with the alias you usually use for it (e.g. loan_accounts la)', "Rowlight learns your aliases from the queries you run; the suggestion says \"alias la (yours)\". New tables get an alias from their name."],
       ['Tab / Enter', 'Accept the highlighted suggestion'],
       ['Esc', 'Close the suggestion list'],

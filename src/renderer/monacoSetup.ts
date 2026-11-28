@@ -17,7 +17,7 @@ import { jsonError, looksLikeJson, minifyJson, prettyJson } from '../shared/json
 import { metaCache } from './metaCache';
 import { baseName, isTablePosition, joinOnTarget, makeAlias, parseTableRefs, statementAt, suggestJoinConditions, type TableRef } from '../shared/sqlAssist';
 import type { DbType, TableInfo } from '../shared/types';
-import { clauseAt, functionsFor, learnedAlias, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, bareStarFixes, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
+import { clauseAt, functionsFor, learnedAlias, unknownQualifiers, learnedJoinConditions, lintSql, preferredFunctionKinds, selectItems, smartStatements, bareStarFixes, snippetsFor, withSemicolons, type Clause } from '../shared/sqlSmart';
 import { rankKey, smart, usageFor } from './smart';
 
 (self as any).MonacoEnvironment = {
@@ -114,21 +114,31 @@ const provider: monaco.languages.CompletionItemProvider = {
       // ---- "x." → columns of the table behind alias x (or tables of database x) ----
       if (dotMatch) {
         const qualifier = unquote(dotMatch[1]);
-        const ref = byName.get(qualifier.toLowerCase());
+        let ref = byName.get(qualifier.toLowerCase());
+        // "from encoredb." while typing: the text so far parses as a TABLE named encoredb. In a FROM / JOIN position a
+        // database name wins, so its tables are listed.
+        if (ref && isTablePosition(textBefore.slice(0, -(qualifier.length + 1)))) {
+          const known = metaCache.peekDatabases(ctx.connectionId) ?? await metaCache.databases(ctx.connectionId).catch(() => [] as string[]);
+          if (known.some((d) => d.toLowerCase() === qualifier.toLowerCase())) ref = undefined;
+        }
         if (ref) {
           for (const c of await metaCache.columns(ctx.connectionId, ref.db, ref.table)) {
             suggestions.push({ label: c.name, kind: K.Field, detail: c.type, insertText: c.name, range, sortText: '0' + colRank(ref.table, c.name) + c.name });
           }
           return { suggestions };
         }
-        const dbs = metaCache.peekDatabases(ctx.connectionId) ?? [];
-        if (dbs.some((d) => d.toLowerCase() === qualifier.toLowerCase())) {
+        const dbs = metaCache.peekDatabases(ctx.connectionId) ?? await metaCache.databases(ctx.connectionId).catch(() => [] as string[]);
+        const realDb = dbs.find((d) => d.toLowerCase() === qualifier.toLowerCase());
+        if (realDb) {
           const taken = refs.map((r) => r.qualifier);
-          for (const t of await metaCache.tables(ctx.connectionId, qualifier)) {
-            const alias = isTablePosition(textBefore.slice(0, -(qualifier.length + 1))) ? (learnedAlias(stats, t.name, taken) ?? makeAlias(t.name, taken)) : '';
-            suggestions.push({ label: t.name, kind: K.Struct, detail: alias ? 'alias ' + alias : undefined, insertText: alias ? t.name + ' ' + alias : t.name, range, sortText: tableRank(qualifier, t.name) + t.name });
+          const tablePos = isTablePosition(textBefore.slice(0, -(qualifier.length + 1)));
+          for (const t of await metaCache.tables(ctx.connectionId, realDb)) {
+            const alias = tablePos ? (learnedAlias(stats, t.name, taken) ?? makeAlias(t.name, taken)) : '';
+            suggestions.push({ label: { label: t.name, description: alias || undefined }, kind: t.kind === 'view' ? K.Interface : K.Struct,
+              detail: (t.kind === 'view' ? 'view' : 'table') + ' in ' + realDb + (alias ? ' · alias ' + alias : '') + (t.rows ? ` · ~${t.rows.toLocaleString()} rows` : ''),
+              insertText: alias ? t.name + ' ' + alias : t.name, filterText: t.name, range, sortText: tableRank(realDb, t.name) + t.name });
           }
-          return { suggestions };
+          return { suggestions, incomplete: false };
         }
         if (ctx.type === 'mssql' && db) {
           for (const t of await metaCache.tables(ctx.connectionId, db)) {
@@ -160,13 +170,17 @@ const provider: monaco.languages.CompletionItemProvider = {
         };
         if (db) for (const t of await metaCache.tables(ctx.connectionId, db)) suggestions.push(tableItem(db, t, t.name, '0'));
         const dbs = await metaCache.databases(ctx.connectionId).catch(() => metaCache.peekDatabases(ctx.connectionId) ?? []);
-        if (!db) {
-          // No database selected for this tab: offer every database's tables, fully named
-          // ("utility_stagging.upload_batch ub"), so nothing has to be run or selected first.
-          await metaCache.allTables(ctx.connectionId).catch(() => {});
-          for (const d of dbs) for (const t of metaCache.peekTables(ctx.connectionId, d) ?? []) suggestions.push(tableItem(d, t, d + '.' + t.name, '1'));
+        // Tables of the OTHER databases too, fully named ("encoredb.loan l", "bi.report_master rm"), after the
+        // selected database's own tables, so typing part of a name finds it wherever it is.
+        await metaCache.allTables(ctx.connectionId).catch(() => {});
+        const SYSTEM = new Set(['information_schema', 'mysql', 'performance_schema', 'sys']);
+        for (const d of dbs) {
+          if (d === db || SYSTEM.has(d.toLowerCase())) continue;
+          for (const t of metaCache.peekTables(ctx.connectionId, d) ?? []) suggestions.push(tableItem(d, t, d + '.' + t.name, '1'));
         }
-        for (const d of dbs) suggestions.push({ label: d, kind: K.Module, detail: 'database', insertText: d, range, sortText: '0' + d });
+        // Database names: picking one inserts "db." and opens its table list at once.
+        for (const d of dbs) suggestions.push({ label: { label: d, description: 'database' }, kind: K.Module, detail: 'database · then its tables', insertText: d + '.', range,
+          sortText: (d === db ? '2' : '1') + d, command: { id: 'editor.action.triggerSuggest', title: 'tables' } });
         if (on.snippets) pushSnippets(suggestions, ctx.type, 'from', range, SNIPPET);
         return { suggestions };
       }
@@ -304,6 +318,16 @@ export function updateHints(model: monaco.editor.ITextModel) {
   const ctx = contexts.get(model.uri.toString());
   const markers: monaco.editor.IMarkerData[] = [];
   if (ctx) markers.push(...missingSemicolonMarkers(model, ctx.type), ...bareStarMarkers(model, ctx.type));
+  if (ctx?.type === 'mysql') {
+    // "la.account_number" in a statement without "la": an alias copied from another query.
+    for (const u of unknownQualifiers(model.getValue(), ctx.getDatabase(), metaCache.peekDatabases(ctx.connectionId) ?? [])) {
+      const s = model.getPositionAt(u.start);
+      const e = model.getPositionAt(u.end);
+      markers.push({ severity: monaco.MarkerSeverity.Warning, source: 'Rowlight',
+        message: `"${u.name}" is not a table or alias in this statement (maybe copied from another query). Use the table's alias, or its name.`,
+        startLineNumber: s.lineNumber, startColumn: s.column, endLineNumber: e.lineNumber, endColumn: e.column });
+    }
+  }
   if (!ctx || !smart().safety) { monaco.editor.setModelMarkers(model, 'rowlight-hints', markers); return; }
   const db = ctx.getDatabase();
   for (const h of lintSql(model.getValue(), db, ctx.type)) {
@@ -427,6 +451,17 @@ for (const lang of ['mysql', 'sql']) {
   });
 }
 
+/**
+ * After Format the long line is gone, but the view would stay scrolled to where it ended (far right). Put the cursor
+ * at the start of what was formatted and scroll so it is visible from the left edge.
+ */
+function showFromStart(editor: monaco.editor.IStandaloneCodeEditor, start: monaco.IPosition) {
+  editor.setPosition(start);
+  editor.setScrollLeft(0);
+  editor.revealLineInCenterIfOutsideViewport(start.lineNumber);
+  editor.focus();
+}
+
 /** Formats the selection, or the whole script if nothing is selected. Returns an error message or null. */
 export function formatEditor(editor: monaco.editor.IStandaloneCodeEditor): string | null {
   const model = editor.getModel();
@@ -439,6 +474,7 @@ export function formatEditor(editor: monaco.editor.IStandaloneCodeEditor): strin
     editor.pushUndoStop();
     editor.executeEdits('format', [{ range, text, forceMoveMarkers: true }]);
     editor.pushUndoStop();
+    showFromStart(editor, range.getStartPosition());
     if (looksLikeJson(original)) {
       const err = jsonError(original.trim());
       return err ? 'Formatted as JSON, but the JSON is not valid: ' + err : null;
@@ -460,6 +496,7 @@ export function minifyJsonInEditor(editor: monaco.editor.IStandaloneCodeEditor):
   editor.pushUndoStop();
   editor.executeEdits('minify', [{ range, text: minifyJson(original), forceMoveMarkers: true }]);
   editor.pushUndoStop();
+  showFromStart(editor, range.getStartPosition());
   return null;
 }
 
